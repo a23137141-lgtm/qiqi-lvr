@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>七期實價登錄</title>
+<meta name="description" content="臺中市第七期市地重劃區成交行情，依內政部實價登錄官方段別彙整，單價已扣除車位。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+TC:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --slab:#e3e3df;
+    --card:#f7f7f5;
+    --ink:#16181b;
+    --muted:#70747a;
+    --rule:#cbcbc6;
+    --mark:#9e3527;
+
+    --sans:"IBM Plex Sans TC",system-ui,sans-serif;
+    --mono:"IBM Plex Mono","IBM Plex Sans TC",monospace;
+  }
+
+  *{box-sizing:border-box;margin:0;padding:0}
+
+  body{
+    background:var(--slab);
+    color:var(--ink);
+    font-family:var(--sans);
+    font-weight:400;
+    line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+    padding:0 0 4rem;
+  }
+
+  .wrap{max-width:52rem;margin:0 auto;padding:0 1.125rem}
+
+  /* ── 標頭 ───────────────────────────── */
+  .masthead{padding:2.5rem 0 1.75rem;border-bottom:1px solid var(--rule)}
+  .eyebrow{
+    font-family:var(--mono);font-size:.6875rem;font-weight:500;
+    letter-spacing:.16em;text-transform:uppercase;color:var(--muted);
+  }
+  .masthead h1{
+    font-size:clamp(2rem,8vw,2.75rem);font-weight:600;
+    letter-spacing:-.02em;line-height:1.1;margin:.375rem 0 .625rem;
+  }
+  .masthead p{font-size:.8125rem;color:var(--muted);font-weight:300;max-width:34rem}
+
+  /* ── 摘要數字 ───────────────────────── */
+  .facts{
+    display:grid;grid-template-columns:repeat(3,1fr);
+    gap:1rem;padding:1.5rem 0 1.25rem;
+  }
+  .fact .k{
+    font-family:var(--mono);font-size:.625rem;font-weight:500;
+    letter-spacing:.1em;text-transform:uppercase;color:var(--muted);
+    margin-bottom:.25rem;
+  }
+  .fact .v{
+    font-family:var(--mono);font-size:1.375rem;font-weight:500;
+    letter-spacing:-.02em;font-variant-numeric:tabular-nums;
+  }
+  .fact .v small{font-size:.6875rem;font-weight:400;color:var(--muted);margin-left:.15em}
+
+  /* ── 段別網格（signature）───────────── */
+  .grid{
+    display:grid;grid-template-columns:repeat(5,1fr);
+    gap:2px;background:var(--rule);border:1px solid var(--rule);
+  }
+  .cell{
+    background:var(--card);border:0;cursor:pointer;
+    padding:.75rem .25rem .625rem;text-align:center;
+    font-family:var(--sans);color:inherit;
+    transition:transform .12s ease;
+  }
+  .cell:hover{transform:translateY(-1px)}
+  .cell:focus-visible{outline:2px solid var(--ink);outline-offset:-2px;z-index:1}
+  .cell .nm{font-size:.8125rem;font-weight:500;letter-spacing:.02em}
+  .cell .ct{
+    font-family:var(--mono);font-size:1rem;font-weight:500;
+    font-variant-numeric:tabular-nums;margin-top:.125rem;
+  }
+  .cell[data-empty="1"] .nm,
+  .cell[data-empty="1"] .ct{color:var(--muted);opacity:.5}
+  .cell[aria-pressed="true"]{box-shadow:inset 0 0 0 2px var(--ink)}
+  .cell[data-dark="1"]{color:var(--card)}
+  .cell[data-dark="1"] .ct{color:var(--card)}
+
+  .legend{
+    font-size:.6875rem;color:var(--muted);font-weight:300;
+    margin-top:.625rem;line-height:1.6;
+  }
+
+  /* ── 控制列 ─────────────────────────── */
+  .bar{
+    display:flex;flex-wrap:wrap;gap:.625rem;align-items:center;
+    justify-content:space-between;
+    margin:2rem 0 .875rem;padding-top:1.25rem;
+    border-top:1px solid var(--rule);
+  }
+  .seg{display:flex;border:1px solid var(--ink)}
+  .seg button{
+    font-family:var(--sans);font-size:.75rem;font-weight:500;
+    padding:.4375rem .8125rem;background:transparent;color:var(--ink);
+    border:0;cursor:pointer;
+  }
+  .seg button + button{border-left:1px solid var(--ink)}
+  .seg button[aria-pressed="true"]{background:var(--ink);color:var(--slab)}
+  .seg button:focus-visible{outline:2px solid var(--mark);outline-offset:1px}
+
+  select{
+    font-family:var(--sans);font-size:.75rem;color:var(--ink);
+    background:transparent;border:1px solid var(--rule);
+    padding:.4375rem .5rem;cursor:pointer;
+  }
+  select:focus-visible{outline:2px solid var(--ink);outline-offset:1px}
+
+  .tally{font-family:var(--mono);font-size:.6875rem;color:var(--muted)}
+
+  /* ── 成交列表 ───────────────────────── */
+  .deal{
+    background:var(--card);border:1px solid var(--rule);
+    padding:.875rem 1rem;margin-bottom:-1px;
+    display:grid;grid-template-columns:1fr auto;gap:.5rem 1rem;align-items:start;
+  }
+  .deal[data-new="1"]{border-left:3px solid var(--mark);padding-left:calc(1rem - 2px)}
+
+  .deal .sec{
+    font-family:var(--mono);font-size:.6875rem;font-weight:500;
+    letter-spacing:.06em;color:var(--muted);
+  }
+  .deal[data-new="1"] .sec{color:var(--mark)}
+  .deal .addr{font-size:.875rem;font-weight:500;margin:.1875rem 0 .3125rem;line-height:1.35}
+  .deal .meta{font-size:.6875rem;color:var(--muted);font-weight:300;line-height:1.7}
+
+  .deal .price{text-align:right;white-space:nowrap}
+  .deal .unit{
+    font-family:var(--mono);font-size:1.25rem;font-weight:600;
+    letter-spacing:-.02em;font-variant-numeric:tabular-nums;line-height:1.2;
+  }
+  .deal .unit small{font-size:.625rem;font-weight:400;color:var(--muted);margin-left:.15em}
+  .deal .total{
+    font-family:var(--mono);font-size:.75rem;color:var(--muted);
+    font-variant-numeric:tabular-nums;margin-top:.1875rem;
+  }
+
+  .empty{
+    border:1px dashed var(--rule);padding:2.5rem 1rem;text-align:center;
+    font-size:.8125rem;color:var(--muted);
+  }
+
+  footer{
+    margin-top:2.5rem;padding-top:1.25rem;border-top:1px solid var(--rule);
+    font-size:.6875rem;color:var(--muted);font-weight:300;line-height:1.8;
+  }
+  footer code{font-family:var(--mono);font-size:.9em}
+
+  .banner{
+    background:var(--mark);color:#fff;font-size:.75rem;font-weight:500;
+    padding:.5rem 1.125rem;text-align:center;
+  }
+
+  @media (max-width:30rem){
+    .facts{grid-template-columns:1fr 1fr;gap:.875rem}
+    .fact:last-child{grid-column:1/-1}
+    .grid{grid-template-columns:repeat(5,1fr)}
+    .cell{padding:.625rem .125rem .5rem}
+    .cell .nm{font-size:.6875rem}
+    .cell .ct{font-size:.875rem}
+    .deal .unit{font-size:1.125rem}
+  }
+
+  @media (prefers-reduced-motion:reduce){
+    *{transition:none!important}
+  }
+</style>
+</head>
+<body>
+
+<div class="banner" id="banner" hidden></div>
+
+<div class="wrap">
+
+  <header class="masthead">
+    <div class="eyebrow">臺中市第七期市地重劃區</div>
+    <h1>七期實價登錄</h1>
+    <p>內政部每月 1、11、21 日發布。範圍依台中市地政局公告之重劃後段別界定，涵蓋北七期、南七期、西七期，不受西屯／南屯行政區切割。</p>
+  </header>
+
+  <section class="facts">
+    <div class="fact">
+      <div class="k">最新一期</div>
+      <div class="v" id="fPeriod">—</div>
+    </div>
+    <div class="fact">
+      <div class="k">新公布</div>
+      <div class="v" id="fNew">—<small>筆</small></div>
+    </div>
+    <div class="fact">
+      <div class="k">房屋單價中位數</div>
+      <div class="v" id="fMedian">—<small>萬/坪</small></div>
+    </div>
+  </section>
+
+  <section aria-label="各段成交概況">
+    <div class="grid" id="grid"></div>
+    <p class="legend">
+      格子深淺為該段本期新公布筆數，點選可篩選。單價一律扣除車位計算，
+      非官方「單價元平方公尺」（那個含車位，在七期會被大幅稀釋）。
+    </p>
+  </section>
+
+  <div class="bar">
+    <div class="seg" id="scope" role="group" aria-label="資料範圍">
+      <button data-scope="new" aria-pressed="true">本期新公布</button>
+      <button data-scope="all" aria-pressed="false">全部歷史</button>
+    </div>
+    <div style="display:flex;gap:.625rem;align-items:center">
+      <span class="tally" id="tally"></span>
+      <select id="sort" aria-label="排序方式">
+        <option value="date">交易日期（新→舊）</option>
+        <option value="unit">單價（高→低）</option>
+        <option value="total">總價（高→低）</option>
+        <option value="area">坪數（大→小）</option>
+      </select>
+    </div>
+  </div>
+
+  <section id="list" aria-live="polite"></section>
+
+  <footer>
+    資料來源：內政部不動產交易實價查詢服務網（政府資料開放授權條款）。
+    成交至揭露約有 30｝45 天落差，「最新一期」指的是公布日，不是成交月份。
+    官方已濾除顯著異常與特殊交易，故非所有成交案件皆可查得。
+    <br>更新排程：<code>.github/workflows/update.yml</code>
+  </footer>
+
+</div>
+
+<script>
+const SECTIONS = ["惠國","惠泰","惠民","惠安","惠順","惠仁","惠義","惠禮","惠智","惠信"];
+
+let DATA = { latest_period:null, deals:[] };
+let scope = "new";
+let sort  = "date";
+let picked = null;          // 選中的段，null = 全部
+
+const $ = s => document.querySelector(s);
+const fmtPeriod = p => p && p.length === 8 ? `${p.slice(0,4)}/${p.slice(4,6)}/${p.slice(6,8)}` : (p || "—");
+
+function median(xs){
+  const v = xs.filter(n => typeof n === "number" && isFinite(n) && n > 0).sort((a,b)=>a-b);
+  if(!v.length) return null;
+  const m = v.length >> 1;
+  return v.length % 2 ? v[m] : (v[m-1] + v[m]) / 2;
+}
+
+/* 目前篩選條件下的資料 */
+function view(){
+  let d = DATA.deals;
+  if(scope === "new") d = d.filter(x => x.first_seen === DATA.latest_period);
+  if(picked)          d = d.filter(x => x.地段 === picked + "段");
+
+  const key = {
+    date : x => x.交易日 || "",
+    unit : x => x.房屋單價萬坪 ?? -1,
+    total: x => x.總價萬 ?? -1,
+    area : x => x.建物坪 ?? -1,
+  }[sort];
+
+  return [...d].sort((a,b) => {
+    const A = key(a), B = key(b);
+    return A < B ? 1 : A > B ? -1 : 0;
+  });
+}
+
+function renderFacts(){
+  const fresh = DATA.deals.filter(x => x.first_seen === DATA.latest_period);
+  const med = median(fresh.map(x => x.房屋單價萬坪));
+  $("#fPeriod").textContent = fmtPeriod(DATA.latest_period);
+  $("#fNew").innerHTML = `${fresh.length}<small>筆</small>`;
+  $("#fMedian").innerHTML = med ? `${med.toFixed(1)}<small>萬/坪</small>` : `—<small>萬/坪</small>`;
+}
+
+function renderGrid(){
+  const fresh = DATA.deals.filter(x => x.first_seen === DATA.latest_period);
+  const counts = Object.fromEntries(SECTIONS.map(s => [s, 0]));
+  fresh.forEach(x => {
+    const s = (x.地段 || "").replace("段","");
+    if(s in counts) counts[s]++;
+  });
+  const max = Math.max(1, ...Object.values(counts));
+
+  $("#grid").innerHTML = SECTIONS.map(s => {
+    const n = counts[s];
+    const a = n === 0 ? 0 : 0.14 + 0.72 * (n / max);
+    const dark = a > 0.52 ? 1 : 0;
+    return `<button class="cell" data-sec="${s}" data-empty="${n===0?1:0}" data-dark="${dark}"
+              aria-pressed="${picked===s}"
+              style="background:${n?`rgba(158,53,39,${a.toFixed(2)})`:"var(--card)"}"
+              title="${s}段 本期 ${n} 筆">
+              <div class="nm">${s}</div><div class="ct">${n}</div>
+            </button>`;
+  }).join("");
+
+  $("#grid").querySelectorAll(".cell").forEach(b => {
+    b.onclick = () => { picked = picked === b.dataset.sec ? null : b.dataset.sec; render(); };
+  });
+}
+
+function renderList(){
+  const rows = view();
+  $("#tally").textContent = `${rows.length} 筆`;
+
+  if(!rows.length){
+    $("#list").innerHTML = `<div class="empty">這個條件下沒有成交紀錄。${picked ? `${picked}段本期沒有新案，換個段或看全部歷史。` : "換個篩選條件試試。"}</div>`;
+    return;
+  }
+
+  $("#list").innerHTML = rows.map(d => {
+    const isNew = d.first_seen === DATA.latest_period;
+    const unit  = d.房屋單價萬坪;
+    const bits  = [d.建物型態, d.格局, d.樓層 && `${d.樓層}F`, d.車位坪 > 0 && "含車位"].filter(Boolean);
+    return `<article class="deal" data-new="${isNew?1:0}">
+      <div>
+        <div class="sec">${d.地段 || ""}${isNew ? " · 本期新公布" : ""}</div>
+        <div class="addr">${d.地址 || "—"}</div>
+        <div class="meta">${d.交易日 || ""} · ${bits.join(" · ")}</div>
+      </div>
+      <div class="price">
+        <div class="unit">${unit ? unit.toFixed(1) : "—"}<small>萬/坪</small></div>
+        <div class="total">${d.總價萬 ? d.總價萬.toLocaleString() : "—"} 萬 · ${d.建物坪 ? d.建物坪.toFixed(1) : "—"} 坪</div>
+      </div>
+    </article>`;
+  }).join("");
+}
+
+/* 排程壞掉時，網站會安靜地繼續顯示舊資料 —— 那比沒資料更危險。
+   每 10 天一期，超過 12 天沒更新就代表至少漏了一期。 */
+function checkFreshness(){
+  if(!DATA.generated_at) return;
+  const days = (Date.now() - new Date(DATA.generated_at)) / 864e5;
+  if(days > 12){
+    const b = $("#banner");
+    b.hidden = false;
+    b.textContent = `資料已 ${Math.floor(days)} 天未更新，抓取可能失敗，以下行情請勿當作最新`;
+  }
+}
+
+function render(){ renderFacts(); renderGrid(); renderList(); }
+
+/* 控制列 */
+$("#scope").querySelectorAll("button").forEach(b => {
+  b.onclick = () => {
+    scope = b.dataset.scope;
+    $("#scope").querySelectorAll("button").forEach(x =>
+      x.setAttribute("aria-pressed", x === b));
+    render();
+  };
+});
+$("#sort").onchange = e => { sort = e.target.value; renderList(); };
+
+/* 載入 */
+const DEMO = {
+  latest_period: "20260711",
+  deals: [
+    {編號:"d1", 地段:"惠國段", 地址:"臺中市西屯區市政路120號", 交易日:"2026-05-20", 總價萬:4850, 建物坪:73.2, 車位坪:14.1, 房屋單價萬坪:66.3, 建物型態:"住宅大樓", 格局:"3房2廳2衛", 樓層:"12 / 25", first_seen:"20260711"},
+    {編號:"d2", 地段:"惠民段", 地址:"臺中市西屯區惠中路一段88號", 交易日:"2026-05-14", 總價萬:13200, 建物坪:192.2, 車位坪:22.4, 房屋單價萬坪:74.2, 建物型態:"住宅大樓", 格局:"4房2廳4衛", 樓層:"23 / 26", first_seen:"20260711"},
+    {編號:"d3", 地段:"惠民段", 地址:"臺中市南屯區大墩四街210號", 交易日:"2026-04-28", 總價萬:2680, 建物坪:48.6, 車位坪:0, 房屋單價萬坪:55.1, 建物型態:"華廈", 格局:"3房2廳2衛", 樓層:"5 / 7", first_seen:"20260711"},
+    {編號:"d4", 地段:"惠安段", 地址:"臺中市西屯區朝富路168號", 交易日:"2026-05-02", 總價萬:6100, 建物坪:88.4, 車位坪:15.2, 房屋單價萬坪:69.8, 建物型態:"住宅大樓", 格局:"4房2廳3衛", 樓層:"18 / 22", first_seen:"20260711"},
+    {編號:"d5", 地段:"惠仁段", 地址:"臺中市南屯區公益路二段55號", 交易日:"2026-04-19", 總價萬:3892, 建物坪:77.2, 車位坪:13.0, 房屋單價萬坪:62.5, 建物型態:"住宅大樓", 格局:"4房2廳2衛", 樓層:"13 / 20", first_seen:"20260711"},
+    {編號:"d6", 地段:"惠國段", 地址:"臺中市西屯區市政北一路77號", 交易日:"2026-03-11", 總價萬:5400, 建物坪:82.0, 車位坪:14.0, 房屋單價萬坪:64.1, 建物型態:"住宅大樓", 格局:"3房2廳2衛", 樓層:"9 / 23", first_seen:"20260621"},
+  ],
+};
+
+fetch("data.json", {cache:"no-store"})
+  .then(r => r.ok ? r.json() : Promise.reject(r.status))
+  .then(j => { DATA = j; render(); checkFreshness(); })
+  .catch(() => {
+    DATA = DEMO;
+    const b = $("#banner");
+    b.hidden = false;
+    b.textContent = "示範資料 — 尚未讀到 data.json，跑過 qiqi_lvr.py 後就會換成真實成交";
+    render();
+  });
+</script>
+</body>
+</html>
