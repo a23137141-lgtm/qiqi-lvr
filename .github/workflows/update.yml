@@ -10,7 +10,8 @@ on:
   workflow_dispatch: {}   # 允許在 Actions 頁面手動觸發（第一次灌資料會用到）
 
 permissions:
-  contents: write
+  contents: write   # 把資料 commit 回 repo
+  issues: write     # 失敗時開 issue 通知（少了這個，連報錯都會報錯）
 
 concurrency:
   group: lvr-update
@@ -25,7 +26,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-          cache: pip
+          # 注意：不要加 cache: pip。那需要 requirements.txt 之類的檔案來算快取鍵，
+          # 這個 repo 沒有，setup-python 會直接失敗。裝 pandas 也才十幾秒，不值得。
 
       - run: pip install pandas requests
 
