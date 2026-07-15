@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>七期門牌標點</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+TC:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --slab:#e3e3df; --card:#f7f7f5; --ink:#16181b; --muted:#70747a;
+    --rule:#cbcbc6; --mark:#9e3527; --done:#2d6a4f;
+    --sans:"IBM Plex Sans TC",system-ui,sans-serif;
+    --mono:"IBM Plex Mono",monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{font-family:var(--sans);background:var(--slab);color:var(--ink);overflow:hidden}
+
+  .app{display:grid;grid-template-columns:22rem 1fr;height:100vh}
+  @media(max-width:48rem){
+    .app{grid-template-columns:1fr;grid-template-rows:auto 1fr}
+    #side{max-height:38vh}
+  }
+
+  #side{background:var(--card);border-right:1px solid var(--rule);display:flex;flex-direction:column;overflow:hidden}
+
+  .head{padding:1rem 1rem .75rem;border-bottom:1px solid var(--rule)}
+  .eyebrow{font-family:var(--mono);font-size:.625rem;font-weight:500;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+  h1{font-size:1.125rem;font-weight:600;letter-spacing:-.01em;margin:.25rem 0 .5rem}
+  .hint{font-size:.75rem;color:var(--muted);font-weight:300;line-height:1.6}
+
+  .prog{padding:.625rem 1rem;border-bottom:1px solid var(--rule);display:flex;align-items:center;gap:.625rem}
+  .bar{flex:1;height:4px;background:var(--rule);overflow:hidden}
+  .bar i{display:block;height:100%;background:var(--done);width:0;transition:width .3s}
+  .prog span{font-family:var(--mono);font-size:.6875rem;font-weight:500;font-variant-numeric:tabular-nums}
+
+  #list{flex:1;overflow-y:auto}
+  .row{
+    padding:.625rem 1rem;border-bottom:1px solid var(--rule);cursor:pointer;
+    display:grid;grid-template-columns:auto 1fr auto;gap:.5rem;align-items:center;
+  }
+  .row:hover{background:var(--slab)}
+  .row[aria-current="true"]{background:var(--mark);color:#fff}
+  .row[aria-current="true"] .meta{color:rgba(255,255,255,.75)}
+  .row[data-done="1"] .dot{background:var(--done);border-color:var(--done)}
+  .dot{width:9px;height:9px;border-radius:50%;border:1.5px solid var(--rule);background:transparent;flex:none}
+  .addr{font-size:.8125rem;font-weight:500;line-height:1.3}
+  .meta{font-family:var(--mono);font-size:.625rem;color:var(--muted);margin-top:.125rem}
+  .n{font-family:var(--mono);font-size:.75rem;font-weight:600;font-variant-numeric:tabular-nums}
+
+  .foot{padding:.75rem 1rem;border-top:1px solid var(--rule);display:flex;gap:.5rem}
+  button{
+    font-family:var(--sans);font-size:.75rem;font-weight:500;padding:.5rem .75rem;
+    border:1px solid var(--ink);background:transparent;color:var(--ink);cursor:pointer;flex:1;
+  }
+  button.primary{background:var(--ink);color:var(--slab)}
+  button:disabled{opacity:.35;cursor:not-allowed}
+  button:focus-visible{outline:2px solid var(--mark);outline-offset:1px}
+
+  #map{height:100%;background:var(--slab)}
+  .leaflet-container{font-family:var(--sans)}
+
+  #armed{
+    position:absolute;top:.75rem;left:50%;transform:translateX(-50%);z-index:1000;
+    background:var(--mark);color:#fff;padding:.5rem .875rem;font-size:.8125rem;font-weight:500;
+    box-shadow:0 2px 8px rgba(0,0,0,.2);display:none;pointer-events:none;
+  }
+  #armed.on{display:block}
+
+  #out{
+    position:absolute;inset:0;z-index:2000;background:rgba(20,20,20,.75);
+    display:none;align-items:center;justify-content:center;padding:1.5rem;
+  }
+  #out.on{display:flex}
+  .panel{background:var(--card);max-width:40rem;width:100%;padding:1.25rem}
+  .panel h2{font-size:1rem;margin-bottom:.5rem}
+  textarea{
+    width:100%;height:16rem;font-family:var(--mono);font-size:.6875rem;
+    border:1px solid var(--rule);padding:.625rem;resize:vertical;background:#fff;
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside id="side">
+    <div class="head">
+      <div class="eyebrow">七期實價登錄</div>
+      <h1>門牌標點</h1>
+      <p class="hint">左邊點一個門牌，再到地圖上點它的位置。標完按「匯出」。<br>灰色輪廓是 OSM 現成的建築物，點中就好。</p>
+    </div>
+
+    <div class="prog">
+      <div class="bar"><i id="fill"></i></div>
+      <span id="cnt">0 / 0</span>
+    </div>
+
+    <div id="list"></div>
+
+    <div class="foot">
+      <button id="reset">清除</button>
+      <button id="export" class="primary" disabled>匯出</button>
+    </div>
+  </aside>
+
+  <div style="position:relative">
+    <div id="map"></div>
+    <div id="armed">👆 現在點地圖上的位置</div>
+  </div>
+</div>
+
+<div id="out"><div class="panel">
+  <h2>複製這段，貼回對話裡</h2>
+  <textarea id="json" readonly></textarea>
+  <div style="display:flex;gap:.5rem;margin-top:.625rem">
+    <button id="copy" class="primary">複製</button>
+    <button id="close">關閉</button>
+  </div>
+</div></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const KEY = "qiqi_pins_v1";
+let PINS = {};
+try { PINS = JSON.parse(localStorage.getItem(KEY) || "{}"); } catch {}
+
+let rows = [];      // [{addr, n, median, section}]
+let armed = null;   // 目前等待標點的門牌
+const markers = {};
+
+const $ = s => document.querySelector(s);
+
+const map = L.map("map").setView([24.1580, 120.6450], 15);
+L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  maxZoom: 19,
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+}).addTo(map);
+
+// ── 載入 OSM 現成的建築物輪廓當參考 ───────────────
+(async () => {
+  const q = `[out:json][timeout:60];(way["building"](24.150,120.630,24.175,120.660););out geom;`;
+  try {
+    const r = await fetch("https://overpass-api.de/api/interpreter", { method:"POST", body:"data=" + encodeURIComponent(q) });
+    const j = await r.json();
+    const layer = L.layerGroup().addTo(map);
+    j.elements.forEach(e => {
+      if (!e.geometry) return;
+      L.polygon(e.geometry.map(p => [p.lat, p.lon]), {
+        color: "#70747a", weight: 1, opacity: .45, fillOpacity: .06, interactive: false,
+      }).addTo(layer);
+    });
+  } catch (err) { console.warn("Overpass 載入失敗", err); }
+})();
+
+// ── 讀成交資料，整理出門牌清單 ─────────────────
+(async () => {
+  let deals = [];
+  try {
+    const j = await (await fetch("data.json", { cache: "no-store" })).json();
+    deals = j.deals || [];
+  } catch { alert("讀不到 data.json —— 請把這個檔案放在 data.json 旁邊（docs/ 裡）"); return; }
+
+  const g = {};
+  deals.forEach(d => {
+    const b = (d.地址 || "").match(/^(.*?號)/)?.[1];
+    if (!b) return;
+    (g[b] = g[b] || []).push(d);
+  });
+
+  rows = Object.entries(g).map(([addr, ds]) => {
+    const us = ds.map(x => x.房屋單價萬坪).filter(x => x > 0).sort((a,b) => a-b);
+    return {
+      addr, n: ds.length,
+      section: ds[0].地段 || "",
+      median: us.length ? us[Math.floor(us.length/2)] : null,
+    };
+  }).sort((a, b) => b.n - a.n);   // 成交多的排前面 → 先標最有價值的
+
+  render();
+  Object.keys(PINS).forEach(addPin);
+})();
+
+function render() {
+  $("#list").innerHTML = rows.map(r => `
+    <div class="row" data-addr="${r.addr}" data-done="${PINS[r.addr] ? 1 : 0}"
+         aria-current="${armed === r.addr}">
+      <span class="dot"></span>
+      <div>
+        <div class="addr">${r.addr.replace(/^臺中市(西屯區|南屯區)/, "")}</div>
+        <div class="meta">${r.section} · ${r.median ? r.median.toFixed(1) + " 萬/坪" : "—"}</div>
+      </div>
+      <span class="n">${r.n}</span>
+    </div>`).join("");
+
+  $("#list").querySelectorAll(".row").forEach(el => {
+    el.onclick = () => {
+      armed = armed === el.dataset.addr ? null : el.dataset.addr;
+      $("#armed").classList.toggle("on", !!armed);
+      render();
+    };
+  });
+
+  const done = Object.keys(PINS).length;
+  $("#cnt").textContent = `${done} / ${rows.length}`;
+  $("#fill").style.width = rows.length ? (done / rows.length * 100) + "%" : "0";
+  $("#export").disabled = done === 0;
+}
+
+function addPin(addr) {
+  const p = PINS[addr];
+  if (!p) return;
+  if (markers[addr]) map.removeLayer(markers[addr]);
+  const r = rows.find(x => x.addr === addr);
+  markers[addr] = L.circleMarker([p.lat, p.lng], {
+    radius: Math.min(6 + (r?.n || 1) * 0.8, 18),
+    color: "#9e3527", weight: 2, fillColor: "#9e3527", fillOpacity: .45,
+  }).addTo(map).bindTooltip(`${addr.replace(/^臺中市(西屯區|南屯區)/,"")}<br>${r?.n} 筆 · ${r?.median?.toFixed(1) ?? "—"} 萬/坪`);
+}
+
+map.on("click", e => {
+  if (!armed) return;
+  PINS[armed] = { lat: +e.latlng.lat.toFixed(6), lng: +e.latlng.lng.toFixed(6) };
+  localStorage.setItem(KEY, JSON.stringify(PINS));
+  addPin(armed);
+  // 自動跳到下一個還沒標的
+  const i = rows.findIndex(r => r.addr === armed);
+  const next = rows.slice(i + 1).find(r => !PINS[r.addr]) || rows.find(r => !PINS[r.addr]);
+  armed = next ? next.addr : null;
+  $("#armed").classList.toggle("on", !!armed);
+  render();
+});
+
+$("#reset").onclick = () => {
+  if (!confirm("清除所有已標記的點？")) return;
+  Object.values(markers).forEach(m => map.removeLayer(m));
+  Object.keys(markers).forEach(k => delete markers[k]);
+  PINS = {}; armed = null;
+  localStorage.removeItem(KEY);
+  $("#armed").classList.remove("on");
+  render();
+};
+
+$("#export").onclick = () => {
+  $("#json").value = JSON.stringify(PINS, null, 2);
+  $("#out").classList.add("on");
+};
+$("#close").onclick = () => $("#out").classList.remove("on");
+$("#copy").onclick = async () => {
+  $("#json").select();
+  try { await navigator.clipboard.writeText($("#json").value); $("#copy").textContent = "已複製"; }
+  catch { document.execCommand("copy"); $("#copy").textContent = "已複製"; }
+  setTimeout(() => $("#copy").textContent = "複製", 1500);
+};
+</script>
+</body>
+</html>
