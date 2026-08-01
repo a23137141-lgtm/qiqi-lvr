@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>七期地籍套疊</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+TC:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --cream:#efece2; --card:#f8f6f0; --ink:#3a3f38; --muted:#8a8d82;
+    --rule:#dcd8cb; --mark:#9e3527;
+    --sans:"IBM Plex Sans TC",system-ui,sans-serif;
+    --mono:"IBM Plex Mono",monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{font-family:var(--sans);background:var(--cream);overflow:hidden}
+  #map{position:absolute;inset:0}
+  .leaflet-container{background:var(--cream);font-family:var(--sans)}
+
+  .panel{
+    position:absolute;top:.875rem;left:.875rem;z-index:1000;width:15.5rem;
+    background:var(--card);border:1px solid var(--rule);border-radius:4px;
+    max-height:calc(100vh - 1.75rem);overflow-y:auto;
+  }
+  .head{padding:.75rem .875rem .625rem;border-bottom:1px solid var(--rule)}
+  .eyebrow{font-family:var(--mono);font-size:.5625rem;font-weight:500;
+           letter-spacing:.16em;text-transform:uppercase;color:var(--muted)}
+  h1{font-size:1rem;font-weight:600;margin:.2rem 0 .3rem}
+  .head p{font-size:.6875rem;color:var(--muted);font-weight:300;line-height:1.6}
+
+  .sec{padding:.625rem .875rem;border-bottom:1px solid var(--rule)}
+  .sec h2{font-family:var(--mono);font-size:.5625rem;font-weight:500;letter-spacing:.14em;
+          text-transform:uppercase;color:var(--muted);margin-bottom:.45rem}
+  label{display:flex;align-items:center;gap:.45rem;font-size:.75rem;
+        padding:.22rem 0;cursor:pointer;user-select:none}
+  input[type=radio],input[type=checkbox]{accent-color:var(--mark);cursor:pointer;flex:none}
+  .note{font-size:.625rem;color:var(--muted);font-weight:300;line-height:1.55;margin-top:.35rem}
+  .locked{opacity:.5}
+  .tag{font-family:var(--mono);font-size:.5rem;background:var(--rule);
+       padding:.05rem .25rem;border-radius:2px;color:#6a6d64}
+
+  input[type=range]{width:100%;accent-color:var(--mark);margin-top:.2rem}
+
+  #coord{
+    position:absolute;bottom:.875rem;left:.875rem;z-index:1000;
+    background:var(--card);border:1px solid var(--rule);border-radius:4px;
+    padding:.5rem .7rem;font-family:var(--mono);font-size:.6875rem;color:var(--ink);
+  }
+  #coord b{color:var(--mark)}
+  #coord span{color:var(--muted);font-size:.625rem}
+  .cp{margin-left:.4rem;cursor:pointer;border:1px solid var(--rule);background:#fff;
+      font-family:var(--mono);font-size:.5625rem;padding:.1rem .3rem;border-radius:2px}
+</style>
+</head>
+<body>
+<div id="map"></div>
+
+<div class="panel">
+  <div class="head">
+    <div class="eyebrow">臺中市第七期重劃區</div>
+    <h1>地籍套疊</h1>
+    <p>國土測繪圖資服務雲官方圖層。點地圖可讀取座標。</p>
+  </div>
+
+  <div class="sec">
+    <h2>底圖</h2>
+    <label><input type="radio" name="base" value="osm" checked> OpenStreetMap</label>
+    <label><input type="radio" name="base" value="emap"> 臺灣通用電子地圖</label>
+    <label><input type="radio" name="base" value="photo"> 正射影像</label>
+  </div>
+
+  <div class="sec">
+    <h2>套疊圖層</h2>
+    <label><input type="checkbox" id="sect" checked> 段籍圖 <span class="tag">免申請</span></label>
+    <label><input type="checkbox" id="emapT"> 電子地圖透明層（含建物）</label>
+    <label class="locked"><input type="checkbox" id="cad"> 地籍圖 <span class="tag">需申請</span></label>
+    <p class="note">
+      地號級地籍圖僅供政府機關、國營機構及學術單位申請介接。
+      勾選後只會收到伺服器的固定錯誤圖磚（256×256），非真實資料。
+    </p>
+  </div>
+
+  <div class="sec">
+    <h2>套疊透明度</h2>
+    <input type="range" id="op" min="10" max="100" value="85">
+  </div>
+
+  <div class="sec" style="border-bottom:0">
+    <h2>七期十段</h2>
+    <p class="note" style="margin-top:0">
+      惠國、惠泰、惠民、惠安、惠順、惠仁、惠義、惠禮、惠智、惠信
+      —— 臺中市地政局公告之第七期重劃後段別。段籍圖畫的就是這些段界。
+    </p>
+  </div>
+</div>
+
+<div id="coord">
+  <b id="ll">點地圖取座標</b>
+  <button class="cp" id="copy">複製</button>
+  <div><span id="zm"></span></div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const map = L.map("map", { center: [24.1590, 120.6430], zoom: 16, maxZoom: 19 });
+
+const NLSC = "https://maps.nlsc.gov.tw/S_Maps/wms";
+const wms = (layers, opts = {}) => L.tileLayer.wms(NLSC, {
+  layers, format: "image/png", transparent: true, version: "1.1.1",
+  attribution: '內政部國土測繪中心', ...opts,
+});
+
+// ── 底圖 ──
+const bases = {
+  osm: L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19, attribution: '&copy; OpenStreetMap' }),
+  emap:  wms("EMAP",  { transparent: false }),
+  photo: wms("PHOTO2", { transparent: false }),
+};
+let base = bases.osm.addTo(map);
+
+document.querySelectorAll('input[name=base]').forEach(r => {
+  r.onchange = e => {
+    map.removeLayer(base);
+    base = bases[e.target.value].addTo(map);
+    base.bringToBack();
+  };
+});
+
+// ── 套疊 ──
+const over = {
+  sect:  wms("LANDSECT", { opacity: .85 }),
+  emapT: wms("EMAP_TRANSPARENT", { opacity: .85 }),
+  cad:   wms("CADASTRALMAP", { opacity: .85 }),
+};
+over.sect.addTo(map);
+
+["sect", "emapT", "cad"].forEach(id => {
+  document.getElementById(id).onchange = e =>
+    e.target.checked ? over[id].addTo(map) : map.removeLayer(over[id]);
+});
+
+document.getElementById("op").oninput = e => {
+  const v = e.target.value / 100;
+  Object.values(over).forEach(l => l.setOpacity(v));
+};
+
+// ── 座標讀取（拿來蒐集門牌位置用）──
+let last = "";
+map.on("click", e => {
+  last = `${e.latlng.lat.toFixed(6)}, ${e.latlng.lng.toFixed(6)}`;
+  document.getElementById("ll").textContent = last;
+  L.circleMarker(e.latlng, { radius: 5, color: "#9e3527", weight: 2,
+                             fillColor: "#9e3527", fillOpacity: .5 })
+   .addTo(map).bindTooltip(last);
+});
+document.getElementById("copy").onclick = async () => {
+  if (!last) return;
+  try { await navigator.clipboard.writeText(last); } catch {}
+  const b = document.getElementById("copy");
+  b.textContent = "已複製"; setTimeout(() => b.textContent = "複製", 1200);
+};
+
+const zm = () => document.getElementById("zm").textContent = `zoom ${map.getZoom()}`;
+map.on("zoomend", zm); zm();
+</script>
+</body>
+</html>
