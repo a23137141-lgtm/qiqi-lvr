@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>新市政中心</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+TC:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --cream:#efece2; --card:#f8f6f0; --ink:#3a3f38; --muted:#8a8d82;
+    --rule:#dcd8cb; --leaf:#6e8c66;
+    --sans:"IBM Plex Sans TC",system-ui,sans-serif;
+    --mono:"IBM Plex Mono",monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    font-family:var(--sans);background:var(--cream);color:var(--ink);
+    min-height:100vh;display:flex;flex-direction:column;align-items:center;
+    padding:2rem 1rem 3rem;-webkit-font-smoothing:antialiased;
+  }
+
+  header{text-align:center;max-width:34rem;margin-bottom:.5rem}
+  .eyebrow{
+    font-family:var(--mono);font-size:.625rem;font-weight:500;
+    letter-spacing:.2em;text-transform:uppercase;color:var(--muted);
+  }
+  h1{
+    font-size:clamp(1.75rem,6vw,2.5rem);font-weight:700;
+    letter-spacing:-.02em;line-height:1.15;margin:.5rem 0 .625rem;
+  }
+  header p{font-size:.8125rem;color:var(--muted);font-weight:300;line-height:1.7}
+
+  .stats{
+    display:flex;gap:1.75rem;justify-content:center;
+    margin:1.25rem 0 .5rem;flex-wrap:wrap;
+  }
+  .stat .v{font-family:var(--mono);font-size:1.125rem;font-weight:500;letter-spacing:-.01em}
+  .stat .v small{font-size:.625rem;color:var(--muted);margin-left:.15em}
+  .stat .k{
+    font-family:var(--mono);font-size:.5625rem;letter-spacing:.12em;
+    text-transform:uppercase;color:var(--muted);margin-top:.125rem;
+  }
+
+  #stage{width:100%;max-width:60rem;margin:0 auto}
+  svg{width:100%;height:auto;display:block;overflow:visible}
+
+  .lbl{font-family:var(--sans);font-weight:600;fill:#fff;paint-order:stroke;
+       stroke:rgba(58,63,56,.28);stroke-width:2.5px;stroke-linejoin:round}
+  .lbl-dark{font-family:var(--sans);font-weight:500;fill:#5c6157}
+  .lbl-road{font-family:var(--mono);fill:#9a9d91;letter-spacing:.06em}
+
+  .legend{
+    display:flex;gap:1rem;flex-wrap:wrap;justify-content:center;
+    margin-top:1.5rem;font-size:.6875rem;color:var(--muted);
+  }
+  .legend i{
+    width:.625rem;height:.625rem;border-radius:2px;
+    display:inline-block;margin-right:.35rem;vertical-align:-1px;
+  }
+
+  footer{
+    margin-top:2rem;max-width:34rem;text-align:center;
+    font-size:.625rem;color:var(--muted);font-weight:300;line-height:1.8;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="eyebrow">臺中市都市計畫</div>
+  <h1>新市政中心專用區</h1>
+  <p>細部計畫第四次通盤檢討　·　民國 105 年 5 月<br>
+     北以臺灣大道、南至市政路、西以朝富路、東至文心路為界</p>
+</header>
+
+<div class="stats">
+  <div class="stat"><div class="v">108.1<small>公頃</small></div><div class="k">計畫面積</div></div>
+  <div class="stat"><div class="v">21,000<small>人</small></div><div class="k">計畫人口</div></div>
+  <div class="stat"><div class="v">17.8<small>公頃</small></div><div class="k">公園用地</div></div>
+  <div class="stat"><div class="v">115<small>年</small></div><div class="k">計畫年期</div></div>
+</div>
+
+<div id="stage"><svg id="map" viewBox="0 0 1200 880"></svg></div>
+
+<div class="legend">
+  <span><i style="background:#8FB183"></i>公園綠地</span>
+  <span><i style="background:#9DB4C8"></i>機關用地</span>
+  <span><i style="background:#E5CDA4"></i>地標</span>
+  <span><i style="background:#EDE9DF"></i>新市政中心專用區</span>
+  <span><i style="background:#D6C9B0"></i>廣場兼停車場</span>
+</div>
+
+<footer>
+  依「變更臺中市都市計畫（新市政中心專用區）細部計畫（第四次通盤檢討）書」
+  之計畫範圍、土地使用分區面積表與道路編號明細表繪製。
+  街廓位置依道路長度與起訖點推算，為示意圖，非地籍測量成果。
+</footer>
+
+<script>
+// ═══ 座標系絵：依道路編號明細表反推 ═══════════════════════
+// 惠中路 875m（臺灣大道→市政路）→ 南北深 875
+// 市政北一路 1220m（河南路→文心路）、市政北二路 825m（西界→惠中路）
+// 惠中二街 400m（市政北七路→市政北一路）→ 中央細格區深僅 400
+const X = { 朝富:0, 河南:200, 惠來:400, 惠民:560, 中一:625, 中二:690, 中三:755, 惠中:825, 文心:1420 };
+const Y = { 臺灣:0, 北七:200, 北六:280, 北五:360, 北三:440, 北二:520, 北一:600, 市政:875 };
+
+// ═══ 色盤 ═══════════════════════════════════════════
+const C = {
+  park:  ["#8FB183", "#789970", "#63825C"],
+  civic: ["#9DB4C8", "#8599AC", "#6F8293"],
+  mark:  ["#E5CDA4", "#CDB287", "#B39A72"],
+  res:   ["#EDE9DF", "#D5CFC1", "#BDB6A6"],
+  res2:  ["#E4DFD2", "#CBC5B5", "#B2AB9A"],
+  plaza: ["#D6C9B0", "#BEB098", "#A69881"],
+  water: ["#A9C9D6", "#8FB0BE", "#7897A5"],
+};
+
+// ═══ 街廓資料 ═══════════════════════════════════════
+// [x0, y0, x1, y1, 高度, 色, 標籤, 標籤大小]
+const B = [
+  // ── 臺灣大道沿線（北緣）──────────────────
+  [100, 0, 360, 195, 10, "park", "秋紅谷", 15],
+  [380, 0, 555, 195, 62, "res", "新6", 0],
+  [575, 0, 800, 195, 55, "res2", "新6", 0],
+  [845, 0, 1150, 195, 70, "res", "新4", 0],
+  [1175, 95, 1290, 195, 40, "res2", "新2", 0],
+  [1310, 120, 1420, 200, 18, "civic", "捷G9-1", 0],
+
+  // ── 西側（朝富路→河南路）─────────────────
+  [0, 215, 185, 395, 44, "res2", "新5", 0],
+  [0, 415, 185, 600, 38, "res", "新8", 0],
+  [0, 620, 185, 790, 42, "res2", "新6", 0],
+
+  // ── 河南路→惠來路 ──────────────────────
+  [210, 210, 300, 268, 7, "plaza", "廣兼停4", 0],
+  [320, 210, 390, 268, 7, "plaza", "廣兼停3", 0],
+  [210, 288, 390, 420, 48, "res", "新1", 0],
+  [210, 440, 390, 600, 52, "res2", "新1", 0],
+  [210, 620, 320, 700, 12, "civic", "停5", 0],
+  [340, 620, 600, 790, 46, "res", "新4", 0],
+
+  // ── 中央綠核：國家歌劇院 ─────────────────
+  [405, 240, 550, 590, 9, "park", "", 0],
+  [430, 275, 525, 420, 34, "mark", "國家歌劇院", 13],
+
+  // ── 惠民路→惠中路 細格區 ────────────────
+  [575, 210, 680, 268, 7, "plaza", "廣兼停1", 0],
+  [700, 215, 800, 268, 7, "plaza", "廣兼停2", 0],
+  [575, 288, 615, 350, 40, "res", "", 0],
+  [635, 288, 680, 350, 44, "res2", "", 0],
+  [700, 288, 745, 350, 38, "res", "", 0],
+  [765, 288, 810, 350, 46, "res2", "新6", 0],
+  [575, 370, 615, 430, 42, "res2", "", 0],
+  [635, 370, 680, 430, 36, "res", "新7", 0],
+  [700, 370, 745, 430, 44, "res2", "", 0],
+  [765, 370, 810, 430, 40, "res", "", 0],
+  [575, 450, 615, 510, 38, "res", "", 0],
+  [635, 450, 680, 510, 46, "res2", "新7", 0],
+  [700, 450, 745, 510, 40, "res", "", 0],
+  [765, 450, 810, 510, 42, "res2", "", 0],
+  [575, 530, 680, 592, 44, "res2", "新6", 0],
+  [700, 530, 810, 592, 40, "res", "", 0],
+  [620, 620, 810, 790, 50, "res2", "新4", 0],
+
+  // ── 惠中路→文心路：市府軸線 ──────────────
+  [1150, 215, 1420, 320, 9, "park", "公1-1", 0],
+  [870, 260, 1130, 440, 30, "civic", "", 0],
+  [905, 285, 1095, 415, 46, "mark", "臺中市政府", 13],
+  [1180, 345, 1420, 470, 44, "res", "新3", 0],
+  [845, 465, 980, 555, 9, "park", "公2-2", 0],
+  [1000, 465, 1230, 600, 9, "park", "公1-2", 0],
+  [1250, 495, 1420, 570, 9, "park", "公2-1", 0],
+  [1250, 595, 1420, 720, 40, "res2", "新3", 0],
+  [900, 620, 1120, 700, 24, "civic", "", 0],
+  [925, 635, 1095, 690, 34, "mark", "臺中市議會", 12],
+  [1140, 620, 1230, 760, 42, "res", "新3", 0],
+  [900, 720, 1060, 800, 9, "park", "公兼兒1", 0],
+  [1080, 780, 1300, 860, 38, "res2", "新3", 0],
+  [840, 820, 1050, 875, 36, "res", "新3", 0],
+];
+
+// ═══ 等角投影 ═══════════════════════════════════
+const S = 0.52, COS = Math.cos(Math.PI/6), SIN = Math.sin(Math.PI/6);
+const OX = 600, OY = 130, ZS = 0.52;
+const px = (x,y,z=0) => [
+  OX + (x - y) * COS * S,
+  OY + (x + y) * SIN * S - z * ZS,
+];
+const pts = a => a.map(p => p.join(",")).join(" ");
+
+const svg = document.getElementById("map");
+const NS = "http://www.w3.org/2000/svg";
+const el = (t, attrs) => {
+  const e = document.createElementNS(NS, t);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  svg.appendChild(e);
+  return e;
+};
+
+// 濾鏡：柔和陰影
+const defs = document.createElementNS(NS, "defs");
+defs.innerHTML = `
+  <filter id="soft" x="-30%" y="-30%" width="160%" height="160%">
+    <feDropShadow dx="0" dy="14" stdDeviation="16" flood-color="#8a8d82" flood-opacity="0.28"/>
+  </filter>
+  <filter id="tiny" x="-40%" y="-40%" width="180%" height="180%">
+    <feDropShadow dx="0" dy="2" stdDeviation="2.5" flood-color="#5c6157" flood-opacity="0.16"/>
+  </filter>`;
+svg.appendChild(defs);
+
+// ── 島基座 ────────────────────────────────
+const PAD = 95, TH = 46;
+const island = [
+  [X.朝富-PAD, Y.臺灣-PAD], [X.文心+PAD, Y.臺灣-PAD],
+  [X.文心+PAD, Y.市政+PAD], [X.朝富-PAD, Y.市政+PAD],
+];
+const topPts = island.map(([x,y]) => px(x,y,0));
+const botPts = island.map(([x,y]) => px(x,y,-TH));
+
+el("polygon", { points: pts(topPts), fill:"#dfe0d3", filter:"url(#soft)" });
+// 島側面（前兩面）
+el("polygon", { points: pts([topPts[1],topPts[2],botPts[2],botPts[1]]), fill:"#b9bcac" });
+el("polygon", { points: pts([topPts[2],topPts[3],botPts[3],botPts[2]]), fill:"#c8cabb" });
+el("polygon", { points: pts(topPts), fill:"#e4e5d9" });
+
+// ── 道路網 ────────────────────────────────
+const roads = [
+  // 橫向（平行臺灣大道）
+  [[X.朝富-40, Y.臺灣],[X.文心+40, Y.臺灣], 26, "臺灣大道"],
+  [[X.朝富, Y.北七],[X.惠中, Y.北七], 13, "市政北七路"],
+  [[X.朝富, Y.北六],[X.惠中, Y.北六], 9, ""],
+  [[X.惠來, Y.北五],[X.惠中, Y.北五], 7, ""],
+  [[X.惠來, Y.北三],[X.惠中, Y.北三], 7, ""],
+  [[X.朝富, Y.北二],[X.惠中, Y.北二], 9, ""],
+  [[X.河南, Y.北一],[X.文心, Y.北一], 13, "市政北一路"],
+  [[X.朝富-40, Y.市政],[X.文心+40, Y.市政], 26, "市政路"],
+  // 縱向
+  [[X.朝富, Y.臺灣],[X.朝富, Y.市政], 11, "朝富路"],
+  [[X.河南, Y.臺灣],[X.河南, Y.市政], 13, "河南路"],
+  [[X.惠來, Y.臺灣],[X.惠來, Y.市政], 9, "惠來路"],
+  [[X.惠民, Y.北七],[X.惠民, Y.北一], 9, ""],
+  [[X.中一, Y.北七],[X.中一, Y.北一], 6, ""],
+  [[X.中二, Y.北七],[X.中二, Y.北一], 6, ""],
+  [[X.中三, Y.北七],[X.中三, Y.北一], 6, ""],
+  [[X.惠中, Y.臺灣],[X.惠中, Y.市政], 17, "惠中路"],
+  [[X.文心, Y.臺灣],[X.文心, Y.市政], 17, "文心路"],
+];
+roads.forEach(([a, b, w]) => {
+  const [x1,y1] = px(a[0], a[1]), [x2,y2] = px(b[0], b[1]);
+  el("line", { x1, y1, x2, y2, stroke:"#f0f0e6", "stroke-width":w, "stroke-linecap":"round" });
+});
+
+// ── 街廓（畫家演算法：x+y 小的先畫）────────────
+B.sort((a,b) => (a[0]+a[1]) - (b[0]+b[1]));
+
+B.forEach(([x0,y0,x1,y1,h,ck,label,fs]) => {
+  const [c0,c1,c2] = C[ck];
+  const t = [px(x0,y0,h), px(x1,y0,h), px(x1,y1,h), px(x0,y1,h)];
+  const bR = [px(x1,y0,0), px(x1,y1,0)];
+  const bL = [px(x0,y1,0)];
+
+  // 右側面
+  el("polygon", { points: pts([t[1], t[2], bR[1], bR[0]]), fill:c2 });
+  // 左側面
+  el("polygon", { points: pts([t[3], t[2], bR[1], bL[0]]), fill:c1 });
+  // 頂面
+  el("polygon", { points: pts(t), fill:c0, stroke:"rgba(255,255,255,.35)", "stroke-width":.6 });
+
+  // 綠地上的小樹
+  if (ck === "park" && (x1-x0) > 110) {
+    for (let i = 0; i < 5; i++) {
+      const rx = x0 + (x1-x0) * (0.18 + 0.66 * ((i*0.37) % 1));
+      const ry = y0 + (y1-y0) * (0.2 + 0.6 * ((i*0.61) % 1));
+      const [cx, cy] = px(rx, ry, h);
+      el("ellipse", { cx, cy: cy-9, rx:5.5, ry:4.5, fill:"#5f7d58", opacity:.85 });
+      el("ellipse", { cx, cy: cy-13, rx:4, ry:3.2, fill:"#7a9a72", opacity:.9 });
+    }
+  }
+
+  // 標籤
+  if (label && fs) {
+    const [cx, cy] = px((x0+x1)/2, (y0+y1)/2, h);
+    el("text", { x:cx, y:cy+4, "text-anchor":"middle", class:"lbl",
+                 "font-size":fs, filter:"url(#tiny)" }).textContent = label;
+  } else if (label) {
+    const [cx, cy] = px((x0+x1)/2, (y0+y1)/2, h);
+    el("text", { x:cx, y:cy+3, "text-anchor":"middle", class:"lbl-dark",
+                 "font-size":9, opacity:.62 }).textContent = label;
+  }
+});
+
+// ── 道路名稱 ──────────────────────────────
+const roadLabels = [
+  ["臺灣大道", (X.朝富+X.文心)/2, Y.臺灣-46, 12],
+  ["市政路",   (X.朝富+X.文心)/2, Y.市政+52, 12],
+  ["朝富路",   X.朝富-46, (Y.臺灣+Y.市政)/2, 10],
+  ["文心路",   X.文心+48, (Y.臺灣+Y.市政)/2, 11],
+  ["河南路",   X.河南, Y.市政+18, 8.5],
+  ["惠中路",   X.惠中, Y.臺灣-20, 9],
+  ["市政北一路", X.河南-38, Y.北一, 8],
+  ["市政北七路", X.河南-38, Y.北七, 8],
+];
+roadLabels.forEach(([txt, x, y, size]) => {
+  const [cx, cy] = px(x, y, 0);
+  el("text", { x:cx, y:cy+3, "text-anchor":"middle", class:"lbl-road",
+               "font-size":size }).textContent = txt;
+});
+</script>
+</body>
+</html>
