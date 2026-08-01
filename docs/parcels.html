@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>七期建案分布</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+TC:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --cream:#efece2; --card:#f8f6f0; --ink:#3a3f38; --muted:#8a8d82; --rule:#dcd8cb;
+    --sans:"IBM Plex Sans TC",system-ui,sans-serif;
+    --mono:"IBM Plex Mono",monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:var(--sans);background:var(--cream);color:var(--ink);
+       min-height:100vh;display:flex;flex-direction:column;align-items:center;
+       padding:1.5rem 1rem 2.5rem;-webkit-font-smoothing:antialiased}
+
+  header{text-align:center;max-width:36rem}
+  .eyebrow{font-family:var(--mono);font-size:.625rem;font-weight:500;
+           letter-spacing:.2em;text-transform:uppercase;color:var(--muted)}
+  h1{font-size:clamp(1.5rem,5vw,2.1rem);font-weight:700;letter-spacing:-.02em;margin:.4rem 0 .45rem}
+  header p{font-size:.75rem;color:var(--muted);font-weight:300;line-height:1.7}
+
+  #stage{width:100%;max-width:64rem;margin:1rem auto 0;position:relative;
+         cursor:grab;touch-action:none;user-select:none}
+  #stage.drag{cursor:grabbing}
+  svg{width:100%;height:auto;display:block;overflow:visible}
+
+  .hud{position:absolute;left:0;bottom:0;display:flex;gap:.45rem;align-items:center;
+       font-family:var(--mono);font-size:.625rem;color:var(--muted);flex-wrap:wrap}
+  .hud button{font-family:var(--mono);font-size:.625rem;color:var(--ink);
+              background:rgba(255,255,255,.65);border:1px solid var(--rule);
+              padding:.28rem .5rem;cursor:pointer;border-radius:3px}
+  .hud button[aria-pressed=true]{background:var(--ink);color:var(--cream)}
+  .ro{background:rgba(255,255,255,.5);padding:.28rem .45rem;border-radius:3px}
+
+  .tip{position:absolute;right:0;bottom:0;text-align:right;font-size:.625rem;
+       color:var(--muted);font-weight:300;line-height:1.7}
+  kbd{font-family:var(--mono);font-size:.9em;background:rgba(255,255,255,.7);
+      border:1px solid var(--rule);border-radius:3px;padding:0 .3em}
+
+  footer{margin-top:2.5rem;max-width:36rem;text-align:center;
+         font-size:.625rem;color:var(--muted);font-weight:300;line-height:1.85}
+  footer b{color:#7a5a52;font-weight:500}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="eyebrow">臺中市第七期重劃區</div>
+  <h1>建案分布</h1>
+  <p>街廓依都市計畫道路明細表推算，街廓內分割、建案名稱與地號由實地圖資轉錄。放大可顯示地號。</p>
+</header>
+
+<div id="stage">
+  <svg id="map" viewBox="0 0 1240 900"></svg>
+  <div class="hud">
+    <button id="reset">回正</button>
+    <button id="flat" aria-pressed="false">平面</button>
+    <span class="ro" id="ro"></span>
+  </div>
+  <div class="tip"><kbd>拖曳</kbd> 旋轉　<kbd>滾輪</kbd> 縮放<br><kbd>Shift+拖曳</kbd> 平移</div>
+</div>
+
+<footer>
+  街廓框架依「變更臺中市都市計畫（新市政中心專用區）細部計畫第四次通盤檢討書」之道路長度與起訖點推算。
+  街廓內分割比例與建案名稱為轉錄自實體圖資之<b>事實資料</b>，非重製該圖之版面。
+  分割比例為目測估計，<b>非地籍測量成果</b>，僅供辨位參考。
+</footer>
+
+<script>
+// ═══ 街廓座標系（同前，由道路明細表反推）═══════════════
+const X = { 朝富:0, 河南:200, 惠來:400, 惠民:560, 中一:625, 中二:690, 中三:755, 惠中:825, 文心:1420 };
+const Y = { 臺灣:0, 北七:200, 北六:280, 北五:360, 北三:440, 北二:520, 北一:600, 市政:875 };
+
+const C = {
+  park:"#8FB183", civic:"#9DB4C8", mark:"#E5CDA4",
+  res:"#EDE9DF", res2:"#E4DFD2", plaza:"#D6C9B0", retail:"#DCC9D4",
+};
+
+// ── 街廓：[x0,y0,x1,y1, 色, 切分軸('x'|'y'), 地號清單, 疊層] ──
+// 地號 = { n:名稱, w:寬度權重, h:高度, c:色(可省) }
+// 名稱留空 = 該格圖資模糊，未轉錄
+const P = (n, lot, w, h, c) => ({ n, lot, w, h, c });
+
+const BLOCKS = [
+  // ══ 臺灣大道沿線 ══════════════════════════
+  { r:[100,0,360,195], c:"park", axis:"x", tier:0, lots:[ P("秋紅谷","",1,10) ] },
+  { r:[380,0,555,195], c:"res", axis:"x", lots:[
+    P("百達富喬","",1,58), P("親家","",1,52), P("由鉅大謙","",1.2,64),
+  ]},
+  { r:[575,0,800,195], c:"res2", axis:"x", lots:[
+    P("中悅","",1,60), P("精湛","",1,54), P("金富豪","",0.9,48), P("天璽5","",1,58),
+  ]},
+  { r:[845,0,1150,195], c:"retail", axis:"x", lots:[
+    P("新光三越 台中店","",1.4,64), P("遠東SOGO 旗艦店","",1.3,60), P("惠宇建設","",1,50),
+  ]},
+  { r:[1175,95,1290,195], c:"res2", axis:"x", lots:[ P("親家","",1,40) ] },
+  { r:[1310,120,1420,200], c:"civic", axis:"x", lots:[ P("G9 捷運轉運站","",1,18) ] },
+
+  // ══ 西側 ═══════════════════════════════
+  { r:[0,215,185,395], c:"res2", axis:"y", lots:[
+    P("華納威秀 Tiger City","",1.3,34), P("水利會（開發中）","",1,14),
+  ]},
+  { r:[0,415,185,600], c:"park", axis:"y", lots:[ P("惠來遺址公園","",1,9) ] },
+  { r:[0,620,185,790], c:"res2", axis:"y", lots:[
+    P("興富發 沙夏","696/728",1,44), P("左岸","349",1,40), P("東方之冠 富宇","1073",1,46),
+  ]},
+
+  // ══ 河南路→惠來路：市政北二路以北 ═══════════
+  { r:[210,210,390,268], c:"plaza", axis:"x", lots:[ P("停車場","",1,7) ] },
+  { r:[210,288,390,420], c:"res", axis:"y", lots:[
+    P("港洲101","",1,50), P("寶輝世紀花園","1225/25",1.1,56),
+  ]},
+  // 市政北二路→市政北一路（黃）: 銳豐 / 寶輝市政 / 國際音樂廳
+  { r:[210,440,390,600], c:"res2", axis:"x", lots:[
+    P("銳豐四季花園","449 · 495/20",1,52),
+    P("寶輝市政","481/14",1,54),
+    P("國際音樂廳","482 · 1015/12",1,38),
+  ]},
+
+  // ══ 市政北一路→市政路：由鉅藏王街廓（紫）═══════
+  { r:[210,620,320,700], c:"civic", axis:"x", lots:[ P("警察局第六分局","1498",1,12) ] },
+  { r:[340,620,600,700], c:"res", axis:"x", lots:[
+    P("由鉅藏王","121 · 1401/26",1.1,56),
+    P("四季天韻","119 · 115 · 820/35",1,50),
+    P("市政交響曲","113 · 111 · 915",1,48),
+  ]},
+  { r:[340,715,600,790], c:"res2", axis:"x", lots:[
+    P("親家 T3","123-1 · 936",1,46),
+    P("林鼎","1806/14 · 340",1,44),
+    P("米堤 MOTEL","1041 · 580",0.9,26),
+    P("金錢豹","357 · 678",0.9,30),
+  ]},
+
+  // ══ 中央綠核 ════════════════════════════
+  { r:[405,240,550,590], c:"park", axis:"y", tier:0, lots:[ P("","",1,9) ] },
+  { r:[430,275,525,420], c:"mark", axis:"y", tier:1, lots:[ P("臺中大都會歌劇院","11540/51",1,34) ] },
+
+  // ══ 惠民路→惠中路：天璽街廓（黃）════════════
+  { r:[575,210,800,268], c:"plaza", axis:"x", lots:[
+    P("寶輝花園廣場","1595/25",1,11), P("惠來停車場","1179",1,7),
+  ]},
+  { r:[575,288,810,350], c:"res", axis:"x", lots:[
+    P("天璽 I","337 · 340 · 695/15",1,56),
+    P("天璽 II","348 · 338/14 · 476/15",1,54),
+    P("人文總太之星","424/22 · 64",1,46),
+  ]},
+
+  // ── 聯聚軸線（橘）──────────────────────
+  { r:[575,370,810,430], c:"res2", axis:"x", lots:[
+    P("聯聚仁愛","569/20 · 171",1.1,58),
+    P("卡爾登 MOTEL","605 · 335",0.85,30),
+    P("蘭愛印月","579 · 433",1,44),
+  ]},
+  { r:[575,450,810,510], c:"res", axis:"x", lots:[
+    P("聯聚東方","391/14 · 165 · 421",1.1,56),
+    P("聯聚怡和","951/28",1,52),
+    P("唯美整形","328",0.8,34),
+    P("時代贈邸","510/15",0.9,40),
+  ]},
+  { r:[575,530,810,592], c:"res2", axis:"x", lots:[
+    P("RICO PADRE","315 · 146 · 142",1,40),
+    P("文化前園","317/14 · 320",1,44),
+    P("精銳悅騰","456/23 · 503",1,42),
+  ]},
+
+  // ══ 市政北一路→市政路：東龍街廓（綠）═════════
+  { r:[620,620,810,700], c:"res", axis:"x", lots:[
+    P("東龍","186 · 185 · 182",1.1,52),
+    P("春風 MOTEL","1219 · 1012",0.9,28),
+    P("市政都心廣場","184 · 1636/38",1,46),
+  ]},
+  { r:[620,715,810,790], c:"res2", axis:"x", lots:[
+    P("婦女","180 · 923 · 969",1,38),
+    P("豐邑聯聚","179 · 1411",1,48),
+    P("聯聚建設接待中心","",1,26),
+    P("群園","176 · 764",1,44),
+  ]},
+
+  // ══ 惠中路→文心路：市府軸線 ═══════════════
+  { r:[1150,215,1420,320], c:"park", axis:"x", lots:[ P("市府廣場","",1,9) ] },
+  { r:[870,260,1130,440], c:"civic", axis:"x", tier:0, lots:[ P("","",1,30) ] },
+  { r:[905,285,1095,415], c:"mark", axis:"x", tier:1, lots:[ P("臺中市政大樓","1497/10",1,46) ] },
+  { r:[1180,345,1420,470], c:"res", axis:"y", lots:[
+    P("林鼎一邸","341/21 · 321/14",1,48),
+    P("天賞集團","516",1,50),
+    P("親家 愛敦閣","864/29",1,52),
+    P("仁山海派","157 · 395/26",1,46),
+  ]},
+  { r:[845,465,980,555], c:"park", axis:"x", lots:[ P("夏綠地園道","",1,9) ] },
+  { r:[1000,465,1230,600], c:"park", axis:"x", lots:[ P("七期園道","",1,9) ] },
+  { r:[1250,495,1420,570], c:"park", axis:"x", lots:[ P("市政水景公園","",1,9) ] },
+  { r:[1250,595,1420,720], c:"res2", axis:"y", lots:[
+    P("總太東方帝國","2022/38",1,56), P("帝國大廈","1814",1,50),
+  ]},
+  { r:[900,620,1120,700], c:"civic", axis:"x", tier:0, lots:[ P("","",1,24) ] },
+  { r:[925,635,1095,690], c:"mark", axis:"x", tier:1, lots:[ P("臺中市議會","4533/14",1,34) ] },
+  { r:[1140,620,1230,760], c:"res", axis:"y", lots:[
+    P("寶璽","1143",1,50), P("元亨利貞","926/23",1,46),
+  ]},
+  { r:[900,720,1060,800], c:"park", axis:"x", lots:[ P("公兼兒 1","",1,9) ] },
+
+  // ══ 市政路南側 ═════════════════════════
+  { r:[840,820,1105,875], c:"res", axis:"x", lots:[
+    P("僑園飯店","1047 · 54",1,44),
+    P("HONMA","832",0.8,30),
+    P("水相","480",0.9,34),
+    P("郵局","521 · 968/26",0.8,26),
+  ]},
+  { r:[1125,820,1420,875], c:"res2", axis:"x", lots:[
+    P("總太東方大廈","476/15",1,50),
+    P("伍角舸板","646 · 454",0.8,28),
+    P("天璽III 之璽","709/18 · 790/22",1,52),
+    P("加賀","145 · 1797",0.9,42),
+  ]},
+];
+
+const ROADS = [
+  [[X.朝富-40,Y.臺灣],[X.文心+40,Y.臺灣],26],
+  [[X.朝富,Y.北七],[X.惠中,Y.北七],13],
+  [[X.朝富,Y.北六],[X.惠中,Y.北六],9],
+  [[X.惠來,Y.北五],[X.惠中,Y.北五],7],
+  [[X.惠來,Y.北三],[X.惠中,Y.北三],7],
+  [[X.朝富,Y.北二],[X.惠中,Y.北二],9],
+  [[X.河南,Y.北一],[X.文心,Y.北一],13],
+  [[X.朝富-40,Y.市政],[X.文心+40,Y.市政],26],
+  [[X.朝富,Y.臺灣],[X.朝富,Y.市政],11],
+  [[X.河南,Y.臺灣],[X.河南,Y.市政],13],
+  [[X.惠來,Y.臺灣],[X.惠來,Y.市政],9],
+  [[X.惠民,Y.北七],[X.惠民,Y.北一],9],
+  [[X.惠中,Y.臺灣],[X.惠中,Y.市政],17],
+  [[X.文心,Y.臺灣],[X.文心,Y.市政],17],
+];
+const ROAD_LABELS = [
+  ["臺灣大道",(X.朝富+X.文心)/2, Y.臺灣-54,12],
+  ["市政路",  (X.朝富+X.文心)/2, Y.市政+58,12],
+  ["朝富路",  X.朝富-54,(Y.臺灣+Y.市政)/2,10],
+  ["文心路",  X.文心+56,(Y.臺灣+Y.市政)/2,11],
+  ["河南路",  X.河南, Y.市政+24,8.5],
+  ["惠中路",  X.惠中, Y.臺灣-26,9],
+  ["市政北一路", X.河南-46, Y.北一,8],
+];
+
+// ═══ 把街廓依權重切成地號 ═══════════════════
+function subdivide(blk) {
+  const [x0,y0,x1,y1] = blk.r;
+  const total = blk.lots.reduce((s,l) => s + l.w, 0);
+  const span = blk.axis === "x" ? (x1-x0) : (y1-y0);
+  const GAP = blk.lots.length > 1 ? 4 : 0;   // 地籍線的縫
+  const usable = span - GAP * (blk.lots.length - 1);
+  let cur = blk.axis === "x" ? x0 : y0;
+  return blk.lots.map(l => {
+    const len = usable * (l.w / total);
+    const rect = blk.axis === "x"
+      ? [cur, y0, cur + len, y1]
+      : [x0, cur, x1, cur + len];
+    cur += len + GAP;
+    return { rect, h: l.h, name: l.n, lot: l.lot, color: l.c || blk.c, tier: blk.tier || 0 };
+  });
+}
+const LOTS = BLOCKS.flatMap(subdivide);
+
+// ═══ 相機 ══════════════════════════════════
+const CX = (X.朝富+X.文心)/2, CY = (Y.臺灣+Y.市政)/2;
+const cam = { az:45, el:30, zoom:.56, panX:0, panY:0 };
+const HOME = { ...cam };
+const rad = d => d*Math.PI/180;
+
+function proj(x,y,z){
+  const a=rad(cam.az), e=rad(cam.el);
+  const dx=x-CX, dy=y-CY;
+  const rx=dx*Math.cos(a)-dy*Math.sin(a);
+  const ry=dx*Math.sin(a)+dy*Math.cos(a);
+  return [620+rx*cam.zoom+cam.panX,
+          420+(ry*Math.sin(e)-z*Math.cos(e))*cam.zoom+cam.panY,
+          ry];
+}
+const NORMALS=[[0,-1],[1,0],[0,1],[-1,0]];
+function shade(hex,nx,ny){
+  const a=rad(cam.az);
+  const wx=nx*Math.cos(a)-ny*Math.sin(a), wy=nx*Math.sin(a)+ny*Math.cos(a);
+  if(wy<=0.001) return null;
+  return mix(hex, 0.63-0.15*wx-0.10*wy);
+}
+function mix(hex,k){
+  const n=parseInt(hex.slice(1),16);
+  return `rgb(${Math.round(((n>>16)&255)*k)},${Math.round(((n>>8)&255)*k)},${Math.round((n&255)*k)})`;
+}
+const pts = a => a.map(p=>`${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(" ");
+
+const svg = document.getElementById("map");
+const DEFS = `<defs>
+  <filter id="soft" x="-30%" y="-30%" width="160%" height="160%">
+    <feDropShadow dx="0" dy="16" stdDeviation="18" flood-color="#8a8d82" flood-opacity="0.26"/></filter>
+  <filter id="tiny" x="-45%" y="-45%" width="190%" height="190%">
+    <feDropShadow dx="0" dy="1.5" stdDeviation="2" flood-color="#4a4f46" flood-opacity="0.22"/></filter>
+</defs>`;
+
+function render(){
+  const o=[DEFS];
+  const PAD=95, TH=44;
+  const cn=[[X.朝富-PAD,Y.臺灣-PAD],[X.文心+PAD,Y.臺灣-PAD],[X.文心+PAD,Y.市政+PAD],[X.朝富-PAD,Y.市政+PAD]];
+  const tp=cn.map(([x,y])=>proj(x,y,0)), bt=cn.map(([x,y])=>proj(x,y,-TH));
+  o.push(`<polygon points="${pts(tp)}" fill="#dfe0d3" filter="url(#soft)"/>`);
+  for(let i=0;i<4;i++){
+    const j=(i+1)%4, c=shade("#c8cabb",NORMALS[i][0],NORMALS[i][1]);
+    if(c) o.push(`<polygon points="${pts([tp[i],tp[j],bt[j],bt[i]])}" fill="${c}"/>`);
+  }
+  o.push(`<polygon points="${pts(tp)}" fill="#e4e5d9"/>`);
+
+  ROADS.forEach(([a,b,w])=>{
+    const p1=proj(a[0],a[1],0), p2=proj(b[0],b[1],0);
+    o.push(`<line x1="${p1[0].toFixed(1)}" y1="${p1[1].toFixed(1)}" x2="${p2[0].toFixed(1)}" y2="${p2[1].toFixed(1)}" stroke="#f0f0e6" stroke-width="${(w*cam.zoom/0.56).toFixed(1)}" stroke-linecap="round"/>`);
+  });
+  ROAD_LABELS.forEach(([t,x,y,s])=>{
+    const p=proj(x,y,0);
+    o.push(`<text x="${p[0].toFixed(1)}" y="${(p[1]+3).toFixed(1)}" text-anchor="middle" font-family="var(--mono)" font-size="${s}" fill="#9a9d91" letter-spacing=".06em">${t}</text>`);
+  });
+
+  const items = LOTS.map(L=>{
+    const [x0,y0,x1,y1]=L.rect;
+    return { L, d: proj((x0+x1)/2,(y0+y1)/2,0)[2] };
+  }).sort((a,b)=>(a.L.tier-b.L.tier)||(a.d-b.d));
+
+  items.forEach(({L})=>{
+    const [x0,y0,x1,y1]=L.rect;
+    const t=[proj(x0,y0,L.h),proj(x1,y0,L.h),proj(x1,y1,L.h),proj(x0,y1,L.h)];
+    const g=[proj(x0,y0,0),proj(x1,y0,0),proj(x1,y1,0),proj(x0,y1,0)];
+    for(let i=0;i<4;i++){
+      const j=(i+1)%4, c=shade(L.color,NORMALS[i][0],NORMALS[i][1]);
+      if(c) o.push(`<polygon points="${pts([t[i],t[j],g[j],g[i]])}" fill="${c}"/>`);
+    }
+    o.push(`<polygon points="${pts(t)}" fill="${L.color}" stroke="rgba(255,255,255,.42)" stroke-width=".7"/>`);
+
+    if(L.name && cam.el>12 && cam.zoom>0.34){
+      const p=proj((x0+x1)/2,(y0+y1)/2,L.h);
+      const big = L.h>30 && L.name.length<9;
+      const fs = L.name.length>7 ? 8.5 : (big?11:9.5);
+      const dy = L.lot && cam.zoom>0.6 ? -1.5 : 3.5;
+      o.push(`<text x="${p[0].toFixed(1)}" y="${(p[1]+dy).toFixed(1)}" text-anchor="middle" font-family="var(--sans)" font-weight="600" font-size="${fs}" fill="#fff" stroke="rgba(50,55,48,.42)" stroke-width="2.2" stroke-linejoin="round" paint-order="stroke" filter="url(#tiny)">${L.name}</text>`);
+      if(L.lot && cam.zoom>0.6){
+        o.push(`<text x="${p[0].toFixed(1)}" y="${(p[1]+8).toFixed(1)}" text-anchor="middle" font-family="var(--mono)" font-size="6" fill="#fff" opacity=".82" stroke="rgba(50,55,48,.35)" stroke-width="1.6" paint-order="stroke">${L.lot}</text>`);
+      }
+    }
+  });
+
+  svg.innerHTML=o.join("");
+  document.getElementById("ro").textContent =
+    `方位 ${Math.round(((cam.az%360)+360)%360)}° · 仰角 ${Math.round(cam.el)}° · ${LOTS.filter(l=>l.name).length} 筆`;
+}
+
+// ═══ 互動 ═══════════════════════════════════
+const stage=document.getElementById("stage");
+let drag=null, raf=null;
+const q=()=>{ if(!raf) raf=requestAnimationFrame(()=>{raf=null;render();}); };
+function down(e){
+  const p=e.touches?e.touches[0]:e;
+  drag={x:p.clientX,y:p.clientY,pan:e.shiftKey||e.button===1,
+        az:cam.az,el:cam.el,px:cam.panX,py:cam.panY};
+  stage.classList.add("drag");
+}
+function move(e){
+  if(!drag) return; e.preventDefault();
+  const p=e.touches?e.touches[0]:e;
+  const dx=p.clientX-drag.x, dy=p.clientY-drag.y;
+  if(drag.pan){ cam.panX=drag.px+dx; cam.panY=drag.py+dy; }
+  else { cam.az=drag.az+dx*0.4; cam.el=Math.max(4,Math.min(89,drag.el+dy*0.3)); }
+  q();
+}
+const up=()=>{drag=null;stage.classList.remove("drag");};
+stage.addEventListener("mousedown",down);
+stage.addEventListener("touchstart",down,{passive:false});
+addEventListener("mousemove",move); addEventListener("touchmove",move,{passive:false});
+addEventListener("mouseup",up); addEventListener("touchend",up);
+stage.addEventListener("contextmenu",e=>e.preventDefault());
+stage.addEventListener("wheel",e=>{
+  e.preventDefault();
+  cam.zoom=Math.max(0.22,Math.min(1.8,cam.zoom*(e.deltaY>0?0.92:1.087))); q();
+},{passive:false});
+
+document.getElementById("reset").onclick=()=>{Object.assign(cam,HOME);render();};
+const fb=document.getElementById("flat");
+fb.onclick=()=>{
+  const on = fb.getAttribute("aria-pressed")==="true";
+  fb.setAttribute("aria-pressed", String(!on));
+  cam.az = on?45:0; cam.el = on?30:89; render();
+};
+
+render();
+</script>
+</body>
+</html>
