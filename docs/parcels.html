@@ -76,17 +76,20 @@ const Y = { 臺灣:0, 北七:200, 北六:280, 北五:360, 北三:440, 北二:520
 
 // 一個街廓一個色系（沿用實地圖資的分色邏輯，柔和化）
 const C = {
-  park:  "#1F7D48",  // 深綠：公園、園道
-  civic: "#2F62A6",  // 藍：機關、捷運、分局
-  mark:  "#8A8A8A",  // 灰：市政大樓等主體
-  plaza: "#C9C9C9",  // 淺灰：停車場
-  sand:  "#F0DC3C",  // 黃
-  mauve: "#CE86BE",  // 紫
-  clay:  "#F09A50",  // 橘
-  sage:  "#A3CC9B",  // 綠
-  rose:  "#EF9090",  // 紅
-  slate: "#6B9BD2",  // 淺藍
+  park:  "#8FB183",  // 綠：公園、園道（保留高度）
+  civic: "#9DB4C8",  // 藍：機關、捷運（保留高度）
+  mark:  "#E5CDA4",  // 褐：地標主體（保留高度）
+  plaza: "#D6C9B0",
+  sand:  "#EDE9DF",
+  mauve: "#E4DFD2",
+  clay:  "#EDE9DF",
+  sage:  "#E4DFD2",
+  rose:  "#EDE9DF",
+  slate: "#E4DFD2",
 };
+
+// 只有這三種立體，其餘壓成平面
+const TALL = new Set(["park", "civic", "mark"]);
 
 // 底色深就用白字，底色淺就用深字（沿用實地圖資的作法）
 function ink(hex){
@@ -275,7 +278,9 @@ function subdivide(blk) {
       ? [cur, y0, cur + len, y1]
       : [x0, cur, x1, cur + len];
     cur += len + GAP;
-    return { rect, h: l.h, name: l.n, lot: l.lot, color: C[l.c] || C[blk.c] || "#DDDDDD", tier: blk.tier || 0 };
+    const key = l.c || blk.c;
+    return { rect, h: TALL.has(key) ? l.h : 0, name: l.n, lot: l.lot,
+             color: C[key] || "#DDDDDD", tier: blk.tier || 0 };
   });
 }
 const LOTS = BLOCKS.flatMap(subdivide);
@@ -300,7 +305,7 @@ function shade(hex,nx,ny){
   const a=rad(cam.az);
   const wx=nx*Math.cos(a)-ny*Math.sin(a), wy=nx*Math.sin(a)+ny*Math.cos(a);
   if(wy<=0.001) return null;
-  return mix(hex, 0.80-0.13*wx-0.09*wy);
+  return mix(hex, 0.62-0.16*wx-0.10*wy);
 }
 function mix(hex,k){
   const n=parseInt(hex.slice(1),16);
@@ -346,11 +351,13 @@ function render(){
     const [x0,y0,x1,y1]=L.rect;
     const t=[proj(x0,y0,L.h),proj(x1,y0,L.h),proj(x1,y1,L.h),proj(x0,y1,L.h)];
     const g=[proj(x0,y0,0),proj(x1,y0,0),proj(x1,y1,0),proj(x0,y1,0)];
-    for(let i=0;i<4;i++){
-      const j=(i+1)%4, c=shade(L.color,NORMALS[i][0],NORMALS[i][1]);
-      if(c) o.push(`<polygon points="${pts([t[i],t[j],g[j],g[i]])}" fill="${c}"/>`);
+    if(L.h > 0){
+      for(let i=0;i<4;i++){
+        const j=(i+1)%4, c=shade(L.color,NORMALS[i][0],NORMALS[i][1]);
+        if(c) o.push(`<polygon points="${pts([t[i],t[j],g[j],g[i]])}" fill="${c}"/>`);
+      }
     }
-    o.push(`<polygon points="${pts(t)}" fill="${L.color}" stroke="#FFFFFF" stroke-width="1.1"/>`);
+    o.push(`<polygon points="${pts(t)}" fill="${L.color}" stroke="rgba(255,255,255,.5)" stroke-width=".8"/>`);
 
     if(L.name && cam.el>12 && cam.zoom>0.34){
       const p=proj((x0+x1)/2,(y0+y1)/2,L.h);
