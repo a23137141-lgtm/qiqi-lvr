@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>七期地圖</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+TC:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --slab:#e3e3df; --card:#f7f7f5; --ink:#16181b; --muted:#70747a;
+    --rule:#cbcbc6; --mark:#9e3527;
+    --sans:"IBM Plex Sans TC",system-ui,sans-serif;
+    --mono:"IBM Plex Mono",monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{font-family:var(--sans);background:var(--slab);color:var(--ink);overflow:hidden}
+
+  #map{position:absolute;inset:0;background:var(--slab)}
+  .leaflet-container{font-family:var(--sans);background:var(--slab)}
+
+  /* 標題卡 */
+  .card{
+    position:absolute;top:1rem;left:1rem;z-index:1000;
+    background:var(--card);border:1px solid var(--rule);
+    padding:.875rem 1rem;max-width:17rem;
+  }
+  .eyebrow{
+    font-family:var(--mono);font-size:.5625rem;font-weight:500;
+    letter-spacing:.16em;text-transform:uppercase;color:var(--muted);
+  }
+  h1{font-size:1.25rem;font-weight:600;letter-spacing:-.02em;margin:.25rem 0 .375rem}
+  .sub{font-size:.6875rem;color:var(--muted);font-weight:300;line-height:1.65}
+
+  /* 圖層開關 */
+  .ctrl{
+    position:absolute;bottom:1rem;left:1rem;z-index:1000;
+    background:var(--card);border:1px solid var(--rule);padding:.625rem .75rem;
+  }
+  .ctrl label{
+    display:flex;align-items:center;gap:.5rem;
+    font-size:.75rem;cursor:pointer;padding:.1875rem 0;user-select:none;
+  }
+  .ctrl input{accent-color:var(--mark);cursor:pointer}
+  .ctrl .hint{font-size:.625rem;color:var(--muted);font-weight:300;margin-top:.375rem;line-height:1.5}
+
+  #status{
+    position:absolute;bottom:1rem;right:1rem;z-index:1000;
+    font-family:var(--mono);font-size:.625rem;color:var(--muted);
+    background:var(--card);border:1px solid var(--rule);padding:.375rem .625rem;
+  }
+
+  .leaflet-control-attribution{font-size:.5625rem;background:rgba(247,247,245,.85)!important}
+
+  @media(max-width:32rem){
+    .card{max-width:calc(100% - 2rem);padding:.75rem .875rem}
+    h1{font-size:1.0625rem}
+    .ctrl{bottom:.75rem;left:.75rem;padding:.5rem .625rem}
+    #status{display:none}
+  }
+</style>
+</head>
+<body>
+
+<div id="map"></div>
+
+<div class="card">
+  <div class="eyebrow">臺中市第七期市地重劃區</div>
+  <h1>七期地圖</h1>
+  <p class="sub">範圍：北至臺灣大道三段、東至文心路、西至河南路、南至大墩路一帶。區外已淡出處理。</p>
+</div>
+
+<div class="ctrl">
+  <label><input type="checkbox" id="tBuild" checked> 建物輪廓</label>
+  <label><input type="checkbox" id="tMask" checked> 區外淡出</label>
+  <label><input type="checkbox" id="tBound" checked> 邊界線</label>
+  <p class="hint">建物來自 OpenStreetMap</p>
+</div>
+
+<div id="status">載入中…</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+// ── 七期範圍（依四至道路：臺灣大道三段 / 文心路 / 河南路 / 大墩路）────
+// 臺灣大道三段實測 lat 24.1625~24.1731、lon 120.6339~120.6496，北界據此定為 24.1715
+const QIQI = [
+  [24.17150, 120.63450],   // 西北：臺灣大道 × 河南路
+  [24.17150, 120.65100],   // 東北：臺灣大道 × 文心路
+  [24.16550, 120.65350],   // 文心路南下
+  [24.15250, 120.65100],   // 東南：文心路 × 大墩路
+  [24.14950, 120.64300],   // 南界：大墩路
+  [24.15150, 120.63550],   // 西南：河南路 × 大墩路
+  [24.16100, 120.63300],   // 河南路北上
+];
+
+const map = L.map("map", { zoomControl: true, minZoom: 13, maxZoom: 19 });
+const bounds = L.latLngBounds(QIQI).pad(0.08);
+map.fitBounds(bounds);
+map.setMaxBounds(bounds.pad(0.6));
+
+L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  maxZoom: 19,
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+}).addTo(map);
+
+// ── 遮罩：整個世界挖掉七期 → 區外變淡，只剩七期清楚 ──────────
+const WORLD = [[-90,-180],[-90,180],[90,180],[90,-180]];
+const mask = L.polygon([WORLD, QIQI], {
+  color: "transparent", fillColor: "#e3e3df", fillOpacity: .82,
+  interactive: false,
+}).addTo(map);
+
+// ── 邊界線 ──────────────────────────────────
+const bound = L.polygon(QIQI, {
+  color: "#9e3527", weight: 2.5, opacity: .9,
+  fill: false, interactive: false,
+}).addTo(map);
+
+// ── 七期範圍內的建物輪廓 ─────────────────────────
+const buildings = L.layerGroup().addTo(map);
+const st = document.getElementById("status");
+
+function inQiqi(lat, lon) {
+  // ray casting：判斷點是否在多邊形內
+  let hit = false;
+  for (let i = 0, j = QIQI.length - 1; i < QIQI.length; j = i++) {
+    const [yi, xi] = QIQI[i], [yj, xj] = QIQI[j];
+    if ((yi > lat) !== (yj > lat) && lon < (xj - xi) * (lat - yi) / (yj - yi) + xi) hit = !hit;
+  }
+  return hit;
+}
+
+(async () => {
+  const b = L.latLngBounds(QIQI);
+  const box = [b.getSouth(), b.getWest(), b.getNorth(), b.getEast()].map(v => v.toFixed(5)).join(",");
+  const q = `[out:json][timeout:90];(way["building"](${box}););out geom;`;
+
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      st.textContent = attempt > 1 ? `重試 ${attempt}/3…` : "載入建物…";
+      const r = await fetch("https://overpass-api.de/api/interpreter", {
+        method: "POST", body: "data=" + encodeURIComponent(q),
+      });
+      const txt = await r.text();
+      const j = JSON.parse(txt);   // 限流時回 HTML，這裡會丟例外進 catch
+
+      let n = 0;
+      j.elements.forEach(e => {
+        if (!e.geometry?.length) return;
+        // 只留中心點落在七期內的
+        const cLat = e.geometry.reduce((s,p) => s + p.lat, 0) / e.geometry.length;
+        const cLon = e.geometry.reduce((s,p) => s + p.lon, 0) / e.geometry.length;
+        if (!inQiqi(cLat, cLon)) return;
+
+        L.polygon(e.geometry.map(p => [p.lat, p.lon]), {
+          color: "#16181b", weight: .6, opacity: .5,
+          fillColor: "#16181b", fillOpacity: .09,
+        }).addTo(buildings);
+        n++;
+      });
+      st.textContent = `七期內建物 ${n} 棟`;
+      return;
+    } catch (err) {
+      if (attempt === 3) { st.textContent = "建物載入失敗（Overpass 限流），底圖仍可用"; return; }
+      await new Promise(s => setTimeout(s, attempt * 4000));
+    }
+  }
+})();
+
+// ── 圖層開關 ────────────────────────────────
+const toggle = (id, layer) => {
+  document.getElementById(id).onchange = e =>
+    e.target.checked ? map.addLayer(layer) : map.removeLayer(layer);
+};
+toggle("tBuild", buildings);
+toggle("tMask", mask);
+toggle("tBound", bound);
+</script>
+</body>
+</html>
