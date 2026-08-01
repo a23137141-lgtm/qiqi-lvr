@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>新市政中心 3D</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+TC:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --cream:#efece2; --ink:#3a3f38; --muted:#8a8d82; --rule:#dcd8cb;
+    --sans:"IBM Plex Sans TC",system-ui,sans-serif;
+    --mono:"IBM Plex Mono",monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    font-family:var(--sans);background:var(--cream);color:var(--ink);
+    min-height:100vh;display:flex;flex-direction:column;align-items:center;
+    padding:1.75rem 1rem 2.5rem;-webkit-font-smoothing:antialiased;
+  }
+
+  header{text-align:center;max-width:34rem}
+  .eyebrow{
+    font-family:var(--mono);font-size:.625rem;font-weight:500;
+    letter-spacing:.2em;text-transform:uppercase;color:var(--muted);
+  }
+  h1{font-size:clamp(1.6rem,5.5vw,2.25rem);font-weight:700;
+     letter-spacing:-.02em;line-height:1.15;margin:.45rem 0 .5rem}
+  header p{font-size:.75rem;color:var(--muted);font-weight:300;line-height:1.7}
+
+  .stats{display:flex;gap:1.5rem;justify-content:center;margin:1rem 0 .25rem;flex-wrap:wrap}
+  .stat .v{font-family:var(--mono);font-size:1rem;font-weight:500}
+  .stat .v small{font-size:.5625rem;color:var(--muted);margin-left:.15em}
+  .stat .k{font-family:var(--mono);font-size:.5rem;letter-spacing:.12em;
+           text-transform:uppercase;color:var(--muted);margin-top:.1rem}
+
+  #stage{
+    width:100%;max-width:62rem;margin:.5rem auto 0;position:relative;
+    cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;
+  }
+  #stage.drag{cursor:grabbing}
+  svg{width:100%;height:auto;display:block;overflow:visible}
+
+  .hud{
+    position:absolute;left:0;bottom:0;display:flex;gap:.5rem;align-items:center;
+    font-family:var(--mono);font-size:.625rem;color:var(--muted);
+  }
+  .hud button{
+    font-family:var(--mono);font-size:.625rem;color:var(--ink);
+    background:rgba(255,255,255,.6);border:1px solid var(--rule);
+    padding:.3rem .55rem;cursor:pointer;border-radius:3px;
+  }
+  .hud button:hover{background:#fff}
+  .readout{background:rgba(255,255,255,.5);padding:.3rem .5rem;border-radius:3px}
+
+  .tip{
+    position:absolute;right:0;bottom:0;text-align:right;
+    font-size:.625rem;color:var(--muted);font-weight:300;line-height:1.7;
+  }
+  kbd{
+    font-family:var(--mono);font-size:.9em;background:rgba(255,255,255,.7);
+    border:1px solid var(--rule);border-radius:3px;padding:0 .3em;
+  }
+
+  .legend{display:flex;gap:.9rem;flex-wrap:wrap;justify-content:center;
+          margin-top:2.5rem;font-size:.6875rem;color:var(--muted)}
+  .legend i{width:.6rem;height:.6rem;border-radius:2px;display:inline-block;
+            margin-right:.32rem;vertical-align:-1px}
+
+  footer{margin-top:1.5rem;max-width:34rem;text-align:center;
+         font-size:.625rem;color:var(--muted);font-weight:300;line-height:1.8}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="eyebrow">臺中市都市計畫</div>
+  <h1>新市政中心專用區</h1>
+  <p>細部計畫第四次通盤檢討　·　民國 105 年 5 月</p>
+</header>
+
+<div class="stats">
+  <div class="stat"><div class="v">108.1<small>公頃</small></div><div class="k">計畫面積</div></div>
+  <div class="stat"><div class="v">21,000<small>人</small></div><div class="k">計畫人口</div></div>
+  <div class="stat"><div class="v">17.8<small>公頃</small></div><div class="k">公園用地</div></div>
+  <div class="stat"><div class="v">115<small>年</small></div><div class="k">計畫年期</div></div>
+</div>
+
+<div id="stage">
+  <svg id="map" viewBox="0 0 1200 900"></svg>
+  <div class="hud">
+    <button id="reset">回正</button>
+    <span class="readout" id="ro">方位 45° · 仰角 30°</span>
+  </div>
+  <div class="tip">
+    <kbd>拖曳</kbd> 旋轉視角　<kbd>滾輪</kbd> 縮放<br>
+    <kbd>Shift+拖曳</kbd> 平移
+  </div>
+</div>
+
+<div class="legend">
+  <span><i style="background:#8FB183"></i>公園綠地</span>
+  <span><i style="background:#9DB4C8"></i>機關用地</span>
+  <span><i style="background:#E5CDA4"></i>地標</span>
+  <span><i style="background:#EDE9DF"></i>新市政中心專用區</span>
+  <span><i style="background:#D6C9B0"></i>廣場兼停車場</span>
+</div>
+
+<footer>
+  依「變更臺中市都市計畫（新市政中心專用區）細部計畫（第四次通盤檢討）書」之計畫範圍、
+  土地使用分區面積表與道路編號明細表繪製。街廓位置依道路長度與起訖點推算，
+  為示意圖，非地籍測量成果。
+</footer>
+
+<script>
+// ═══ 座標系統：由道路編號明細表反推 ═════════════════════
+const X = { 朝富:0, 河南:200, 惠來:400, 惠民:560, 中一:625, 中二:690, 中三:755, 惠中:825, 文心:1420 };
+const Y = { 臺灣:0, 北七:200, 北六:280, 北五:360, 北三:440, 北二:520, 北一:600, 市政:875 };
+
+// 基底色（頂面），側面亮度由光照即時計算
+const C = {
+  park:  "#8FB183", civic: "#9DB4C8", mark: "#E5CDA4",
+  res:   "#EDE9DF", res2:  "#E4DFD2", plaza:"#D6C9B0",
+};
+
+// [x0, y0, x1, y1, 高, 色, 標籤, 標籤級距, 界層]
+const B = [
+  [100,0,360,195, 10,"park","秋紅谷",15],
+  [380,0,555,195, 62,"res","新6",0],
+  [575,0,800,195, 55,"res2","新6",0],
+  [845,0,1150,195, 70,"res","新4",0],
+  [1175,95,1290,195, 40,"res2","新2",0],
+  [1310,120,1420,200, 18,"civic","捷G9-1",0],
+
+  [0,215,185,395, 44,"res2","新5",0],
+  [0,415,185,600, 38,"res","新8",0],
+  [0,620,185,790, 42,"res2","新6",0],
+
+  [210,210,300,268, 7,"plaza","廣兼停4",0],
+  [320,210,390,268, 7,"plaza","廣兼停3",0],
+  [210,288,390,420, 48,"res","新1",0],
+  [210,440,390,600, 52,"res2","新1",0],
+  [210,620,320,700, 12,"civic","停5",0],
+  [340,620,600,790, 46,"res","新4",0],
+
+  [405,240,550,590, 9,"park","",0],
+  [430,275,525,420, 34,"mark","國家歌劇院",13,1],
+
+  [575,210,680,268, 7,"plaza","廣兼停1",0],
+  [700,215,800,268, 7,"plaza","廣兼停2",0],
+  [575,288,615,350, 40,"res","",0],
+  [635,288,680,350, 44,"res2","",0],
+  [700,288,745,350, 38,"res","",0],
+  [765,288,810,350, 46,"res2","新6",0],
+  [575,370,615,430, 42,"res2","",0],
+  [635,370,680,430, 36,"res","新7",0],
+  [700,370,745,430, 44,"res2","",0],
+  [765,370,810,430, 40,"res","",0],
+  [575,450,615,510, 38,"res","",0],
+  [635,450,680,510, 46,"res2","新7",0],
+  [700,450,745,510, 40,"res","",0],
+  [765,450,810,510, 42,"res2","",0],
+  [575,530,680,592, 44,"res2","新6",0],
+  [700,530,810,592, 40,"res","",0],
+  [620,620,810,790, 50,"res2","新4",0],
+
+  [1150,215,1420,320, 9,"park","公1-1",0],
+  [870,260,1130,440, 30,"civic","",0],
+  [905,285,1095,415, 46,"mark","臺中市政府",13,1],
+  [1180,345,1420,470, 44,"res","新3",0],
+  [845,465,980,555, 9,"park","公2-2",0],
+  [1000,465,1230,600, 9,"park","公1-2",0],
+  [1250,495,1420,570, 9,"park","公2-1",0],
+  [1250,595,1420,720, 40,"res2","新3",0],
+  [900,620,1120,700, 24,"civic","",0],
+  [925,635,1095,690, 34,"mark","臺中市議會",12,1],
+  [1140,620,1230,760, 42,"res","新3",0],
+  [900,720,1060,800, 9,"park","公兼兒1",0],
+  [1080,780,1300,860, 38,"res2","新3",0],
+  [840,820,1050,875, 36,"res","新3",0],
+];
+
+const ROADS = [
+  [[X.朝富-40,Y.臺灣],[X.文心+40,Y.臺灣],26],
+  [[X.朝富,Y.北七],[X.惠中,Y.北七],13],
+  [[X.朝富,Y.北六],[X.惠中,Y.北六],9],
+  [[X.惠來,Y.北五],[X.惠中,Y.北五],7],
+  [[X.惠來,Y.北三],[X.惠中,Y.北三],7],
+  [[X.朝富,Y.北二],[X.惠中,Y.北二],9],
+  [[X.河南,Y.北一],[X.文心,Y.北一],13],
+  [[X.朝富-40,Y.市政],[X.文心+40,Y.市政],26],
+  [[X.朝富,Y.臺灣],[X.朝富,Y.市政],11],
+  [[X.河南,Y.臺灣],[X.河南,Y.市政],13],
+  [[X.惠來,Y.臺灣],[X.惠來,Y.市政],9],
+  [[X.惠民,Y.北七],[X.惠民,Y.北一],9],
+  [[X.中一,Y.北七],[X.中一,Y.北一],6],
+  [[X.中二,Y.北七],[X.中二,Y.北一],6],
+  [[X.中三,Y.北七],[X.中三,Y.北一],6],
+  [[X.惠中,Y.臺灣],[X.惠中,Y.市政],17],
+  [[X.文心,Y.臺灣],[X.文心,Y.市政],17],
+];
+
+const ROAD_LABELS = [
+  ["臺灣大道",(X.朝富+X.文心)/2, Y.臺灣-52,12],
+  ["市政路",  (X.朝富+X.文心)/2, Y.市政+56,12],
+  ["朝富路",  X.朝富-52,(Y.臺灣+Y.市政)/2,10],
+  ["文心路",  X.文心+54,(Y.臺灣+Y.市政)/2,11],
+  ["河南路",  X.河南, Y.市政+22,8.5],
+  ["惠中路",  X.惠中, Y.臺灣-24,9],
+];
+
+// ═══ 相機 ══════════════════════════════════════════
+const CX = (X.朝富 + X.文心) / 2, CY = (Y.臺灣 + Y.市政) / 2;
+const cam = { az: 45, el: 30, zoom: 0.60, panX: 0, panY: 0 };
+const HOME = { ...cam };
+
+const rad = d => d * Math.PI / 180;
+
+function project(x, y, z) {
+  const a = rad(cam.az), e = rad(cam.el);
+  const dx = x - CX, dy = y - CY;
+  const rx = dx * Math.cos(a) - dy * Math.sin(a);
+  const ry = dx * Math.sin(a) + dy * Math.cos(a);
+  return [
+    600 + (rx * cam.zoom) + cam.panX,
+    430 + (ry * Math.sin(e) - z * Math.cos(e)) * cam.zoom + cam.panY,
+    ry,   // 深度：越大越靠近觀者
+  ];
+}
+
+// 側面亮度：法線轉到相機座標後看朝向
+function shade(hex, nx, ny) {
+  const a = rad(cam.az);
+  const wx = nx * Math.cos(a) - ny * Math.sin(a);   // 螢幕左右
+  const wy = nx * Math.sin(a) + ny * Math.cos(a);   // 螢幕遠近
+  if (wy <= 0.001) return null;                     // 背面，不畫
+  // 光源在左上：wx 越負越亮
+  const lit = 0.62 - 0.16 * wx - 0.10 * wy;
+  return mix(hex, lit);
+}
+function mix(hex, k) {
+  const n = parseInt(hex.slice(1), 16);
+  const r = Math.round(((n >> 16) & 255) * k);
+  const g = Math.round(((n >> 8) & 255) * k);
+  const b = Math.round((n & 255) * k);
+  return `rgb(${r},${g},${b})`;
+}
+const P = a => a.map(p => `${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(" ");
+
+// ═══ 繪製 ══════════════════════════════════════════
+const svg = document.getElementById("map");
+const DEFS = `<defs>
+  <filter id="soft" x="-30%" y="-30%" width="160%" height="160%">
+    <feDropShadow dx="0" dy="16" stdDeviation="18" flood-color="#8a8d82" flood-opacity="0.26"/>
+  </filter>
+  <filter id="tiny" x="-40%" y="-40%" width="180%" height="180%">
+    <feDropShadow dx="0" dy="2" stdDeviation="2.5" flood-color="#5c6157" flood-opacity="0.18"/>
+  </filter>
+</defs>`;
+
+function render() {
+  const out = [DEFS];
+
+  // ── 島基座 ──
+  const PAD = 95, TH = 46;
+  const corners = [
+    [X.朝富-PAD, Y.臺灣-PAD], [X.文心+PAD, Y.臺灣-PAD],
+    [X.文心+PAD, Y.市政+PAD], [X.朝富-PAD, Y.市政+PAD],
+  ];
+  const top = corners.map(([x,y]) => project(x,y,0));
+  const bot = corners.map(([x,y]) => project(x,y,-TH));
+
+  out.push(`<polygon points="${P(top)}" fill="#dfe0d3" filter="url(#soft)"/>`);
+  // 島的四個側面，只畫朝向觀者的
+  const sideNormals = [[0,-1],[1,0],[0,1],[-1,0]];
+  for (let i = 0; i < 4; i++) {
+    const j = (i + 1) % 4;
+    const c = shade("#c8cabb", sideNormals[i][0], sideNormals[i][1]);
+    if (c) out.push(`<polygon points="${P([top[i],top[j],bot[j],bot[i]])}" fill="${c}"/>`);
+  }
+  out.push(`<polygon points="${P(top)}" fill="#e4e5d9"/>`);
+
+  // ── 道路 ──
+  ROADS.forEach(([a,b,w]) => {
+    const p1 = project(a[0],a[1],0), p2 = project(b[0],b[1],0);
+    out.push(`<line x1="${p1[0].toFixed(1)}" y1="${p1[1].toFixed(1)}" x2="${p2[0].toFixed(1)}" y2="${p2[1].toFixed(1)}" stroke="#f0f0e6" stroke-width="${(w*cam.zoom/0.6).toFixed(1)}" stroke-linecap="round"/>`);
+  });
+
+  // ── 道路名 ──
+  ROAD_LABELS.forEach(([t,x,y,s]) => {
+    const p = project(x,y,0);
+    out.push(`<text x="${p[0].toFixed(1)}" y="${(p[1]+3).toFixed(1)}" text-anchor="middle" font-family="var(--mono)" font-size="${s}" fill="#9a9d91" letter-spacing=".06em">${t}</text>`);
+  });
+
+  // ── 街廓：先算深度再排序 ──
+  const items = B.map(b => {
+    const [x0,y0,x1,y1,h,ck,label,fs,tier] = b;
+    const c = project((x0+x1)/2, (y0+y1)/2, 0);
+    return { b, depth: c[2], tier: tier || 0 };
+  }).sort((p,q) => (p.tier - q.tier) || (p.depth - q.depth));
+
+  items.forEach(({b}) => {
+    const [x0,y0,x1,y1,h,ck,label,fs] = b;
+    const base = C[ck];
+
+    const t = [project(x0,y0,h), project(x1,y0,h), project(x1,y1,h), project(x0,y1,h)];
+    const g = [project(x0,y0,0), project(x1,y0,0), project(x1,y1,0), project(x0,y1,0)];
+
+    // 四個側面，背面剔除
+    for (let i = 0; i < 4; i++) {
+      const j = (i + 1) % 4;
+      const c = shade(base, sideNormals[i][0], sideNormals[i][1]);
+      if (c) out.push(`<polygon points="${P([t[i],t[j],g[j],g[i]])}" fill="${c}"/>`);
+    }
+    // 頂面
+    out.push(`<polygon points="${P(t)}" fill="${base}" stroke="rgba(255,255,255,.32)" stroke-width=".6"/>`);
+
+    // 公園小樹
+    if (ck === "park" && (x1-x0) > 110) {
+      for (let i = 0; i < 5; i++) {
+        const rx = x0 + (x1-x0) * (0.18 + 0.66 * ((i*0.37) % 1));
+        const ry = y0 + (y1-y0) * (0.20 + 0.60 * ((i*0.61) % 1));
+        const p = project(rx, ry, h);
+        const sc = cam.zoom / 0.6;
+        out.push(`<ellipse cx="${p[0].toFixed(1)}" cy="${(p[1]-9*sc).toFixed(1)}" rx="${(5.5*sc).toFixed(1)}" ry="${(4.5*sc).toFixed(1)}" fill="#5f7d58" opacity=".85"/>`);
+        out.push(`<ellipse cx="${p[0].toFixed(1)}" cy="${(p[1]-13*sc).toFixed(1)}" rx="${(4*sc).toFixed(1)}" ry="${(3.2*sc).toFixed(1)}" fill="#7a9a72" opacity=".9"/>`);
+      }
+    }
+
+    // 標籤（仰角太低就藏起來，免得疊成一團）
+    if (label && cam.el > 12) {
+      const p = project((x0+x1)/2, (y0+y1)/2, h);
+      if (fs) {
+        out.push(`<text x="${p[0].toFixed(1)}" y="${(p[1]+4).toFixed(1)}" text-anchor="middle" font-family="var(--sans)" font-weight="600" font-size="${fs}" fill="#fff" stroke="rgba(58,63,56,.28)" stroke-width="2.5" stroke-linejoin="round" paint-order="stroke" filter="url(#tiny)">${label}</text>`);
+      } else if (cam.zoom > 0.42) {
+        out.push(`<text x="${p[0].toFixed(1)}" y="${(p[1]+3).toFixed(1)}" text-anchor="middle" font-family="var(--sans)" font-weight="500" font-size="9" fill="#5c6157" opacity=".6">${label}</text>`);
+      }
+    }
+  });
+
+  svg.innerHTML = out.join("");
+  document.getElementById("ro").textContent =
+    `方位 ${Math.round(((cam.az % 360) + 360) % 360)}° · 仰角 ${Math.round(cam.el)}°`;
+}
+
+// ═══ 互動 ══════════════════════════════════════════
+const stage = document.getElementById("stage");
+let drag = null, raf = null;
+const queue = () => { if (!raf) raf = requestAnimationFrame(() => { raf = null; render(); }); };
+
+function down(e) {
+  const pt = e.touches ? e.touches[0] : e;
+  drag = { x: pt.clientX, y: pt.clientY, pan: e.shiftKey || e.button === 1,
+           az: cam.az, el: cam.el, px: cam.panX, py: cam.panY };
+  stage.classList.add("drag");
+}
+function move(e) {
+  if (!drag) return;
+  e.preventDefault();
+  const pt = e.touches ? e.touches[0] : e;
+  const dx = pt.clientX - drag.x, dy = pt.clientY - drag.y;
+  if (drag.pan) {
+    cam.panX = drag.px + dx;
+    cam.panY = drag.py + dy;
+  } else {
+    cam.az = drag.az + dx * 0.4;
+    cam.el = Math.max(4, Math.min(89, drag.el + dy * 0.3));
+  }
+  queue();
+}
+function up() { drag = null; stage.classList.remove("drag"); }
+
+stage.addEventListener("mousedown", down);
+stage.addEventListener("touchstart", down, { passive: false });
+window.addEventListener("mousemove", move);
+window.addEventListener("touchmove", move, { passive: false });
+window.addEventListener("mouseup", up);
+window.addEventListener("touchend", up);
+stage.addEventListener("contextmenu", e => e.preventDefault());
+
+stage.addEventListener("wheel", e => {
+  e.preventDefault();
+  cam.zoom = Math.max(0.22, Math.min(1.8, cam.zoom * (e.deltaY > 0 ? 0.92 : 1.087)));
+  queue();
+}, { passive: false });
+
+document.getElementById("reset").onclick = () => { Object.assign(cam, HOME); render(); };
+
+render();
+</script>
+</body>
+</html>
