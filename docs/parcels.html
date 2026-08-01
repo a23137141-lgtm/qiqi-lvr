@@ -275,7 +275,7 @@ function subdivide(blk) {
       ? [cur, y0, cur + len, y1]
       : [x0, cur, x1, cur + len];
     cur += len + GAP;
-    return { rect, h: l.h, name: l.n, lot: l.lot, color: l.c || blk.c, tier: blk.tier || 0 };
+    return { rect, h: l.h, name: l.n, lot: l.lot, color: C[l.c] || C[blk.c] || "#DDDDDD", tier: blk.tier || 0 };
   });
 }
 const LOTS = BLOCKS.flatMap(subdivide);
